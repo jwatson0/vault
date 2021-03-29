@@ -1,9 +1,10 @@
-import Ember from 'ember';
-let { inject } = Ember;
+import { inject as service } from '@ember/service';
+import { computed } from '@ember/object';
+import Controller from '@ember/controller';
 
-export default Ember.Controller.extend({
-  flashMessages: inject.service(),
-  wizard: inject.service(),
+export default Controller.extend({
+  flashMessages: service(),
+  wizard: service(),
 
   queryParams: {
     page: 'page',
@@ -19,19 +20,19 @@ export default Ember.Controller.extend({
   // set via the route `loading` action
   isLoading: false,
 
-  filterMatchesKey: Ember.computed('filter', 'model', 'model.[]', function() {
-    var filter = this.get('filter');
-    var content = this.get('model');
+  filterMatchesKey: computed('filter', 'model', 'model.[]', function() {
+    var filter = this.filter;
+    var content = this.model;
     return !!(content && content.length && content.findBy('id', filter));
   }),
 
-  firstPartialMatch: Ember.computed('filter', 'model', 'model.[]', 'filterMatchesKey', function() {
-    var filter = this.get('filter');
-    var content = this.get('model');
+  firstPartialMatch: computed('filter', 'model', 'model.[]', 'filterMatchesKey', function() {
+    var filter = this.filter;
+    var content = this.model;
     if (!content) {
       return;
     }
-    var filterMatchesKey = this.get('filterMatchesKey');
+    var filterMatchesKey = this.filterMatchesKey;
     var re = new RegExp('^' + filter);
     return filterMatchesKey
       ? null
@@ -50,16 +51,16 @@ export default Ember.Controller.extend({
     deletePolicy(model) {
       let policyType = model.get('policyType');
       let name = model.id;
-      let flash = this.get('flashMessages');
+      let flash = this.flashMessages;
       model
         .destroyRecord()
         .then(() => {
-          flash.success(`${policyType.toUpperCase()} policy "${name}" was successfully deleted.`);
-          if (this.get('wizard.featureState') === 'delete') {
-            this.get('wizard').transitionFeatureMachine('delete', 'CONTINUE', policyType);
-          }
           // this will clear the dataset cache on the store
-          this.send('willTransition');
+          this.send('reload');
+          flash.success(`${policyType.toUpperCase()} policy "${name}" was successfully deleted.`);
+          if (this.wizard.featureState === 'delete') {
+            this.wizard.transitionFeatureMachine('delete', 'CONTINUE', policyType);
+          }
         })
         .catch(e => {
           let errors = e.errors ? e.errors.join('') : e.message;

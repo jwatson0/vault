@@ -6,12 +6,13 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/hashicorp/vault/logical"
-	logicaltest "github.com/hashicorp/vault/logical/testing"
-	"github.com/ory/dockertest"
+	"github.com/hashicorp/vault/helper/testhelpers/docker"
+	logicaltest "github.com/hashicorp/vault/helper/testhelpers/logical"
+	"github.com/hashicorp/vault/sdk/logical"
 )
 
 const (
@@ -31,43 +32,30 @@ func prepareRadiusTestContainer(t *testing.T) (func(), string, int) {
 		return func() {}, os.Getenv(envRadiusRadiusHost), port
 	}
 
-	pool, err := dockertest.NewPool("")
+	runner, err := docker.NewServiceRunner(docker.RunOptions{
+		ImageRepo:     "jumanjiman/radiusd",
+		ImageTag:      "latest",
+		ContainerName: "radiusd",
+		Cmd:           []string{"-f", "-l", "stdout"},
+		Ports:         []string{"1812/udp"},
+	})
 	if err != nil {
-		t.Fatalf("Failed to connect to docker: %s", err)
+		t.Fatalf("Could not start docker radiusd: %s", err)
 	}
 
-	runOpts := &dockertest.RunOptions{
-		Repository:   "jumanjiman/radiusd",
-		Cmd:          []string{"-f", "-l", "stdout"},
-		ExposedPorts: []string{"1812/udp"},
-		Tag:          "latest",
-	}
-	resource, err := pool.RunWithOptions(runOpts)
-	if err != nil {
-		t.Fatalf("Could not start local radius docker container: %s", err)
-	}
-
-	cleanup := func() {
-		err := pool.Purge(resource)
-		if err != nil {
-			t.Fatalf("Failed to cleanup local container: %s", err)
-		}
-	}
-
-	port, _ := strconv.Atoi(resource.GetPort("1812/udp"))
-	address := fmt.Sprintf("127.0.0.1")
-
-	// exponential backoff-retry
-	if err = pool.Retry(func() error {
+	svc, err := runner.StartService(context.Background(), func(ctx context.Context, host string, port int) (docker.ServiceConfig, error) {
 		// There's no straightfoward way to check the state, but the server starts
 		// up quick so a 2 second sleep should be enough.
 		time.Sleep(2 * time.Second)
-		return nil
-	}); err != nil {
-		cleanup()
-		t.Fatalf("Could not connect to radius docker container: %s", err)
+		return docker.NewServiceHostPort(host, port), nil
+	})
+	if err != nil {
+		t.Fatalf("Could not start docker radiusd: %s", err)
 	}
-	return cleanup, address, port
+
+	pieces := strings.Split(svc.Config.Address(), ":")
+	port, _ := strconv.Atoi(pieces[1])
+	return svc.Cleanup, pieces[0], port
 }
 
 func TestBackend_Config(t *testing.T) {
@@ -112,7 +100,7 @@ func TestBackend_Config(t *testing.T) {
 	logicaltest.Test(t, logicaltest.TestCase{
 		AcceptanceTest: false,
 		// PreCheck:       func() { testAccPreCheck(t) },
-		Backend: b,
+		CredentialBackend: b,
 		Steps: []logicaltest.TestStep{
 			testConfigWrite(t, configDataBasic, false),
 			testConfigWrite(t, configDataMissingRequired, true),
@@ -135,7 +123,7 @@ func TestBackend_users(t *testing.T) {
 		t.Fatalf("Unable to create backend: %s", err)
 	}
 	logicaltest.Test(t, logicaltest.TestCase{
-		Backend: b,
+		CredentialBackend: b,
 		Steps: []logicaltest.TestStep{
 			testStepUpdateUser(t, "web", "foo"),
 			testStepUpdateUser(t, "web2", "foo"),
@@ -146,11 +134,6 @@ func TestBackend_users(t *testing.T) {
 }
 
 func TestBackend_acceptance(t *testing.T) {
-	if os.Getenv(logicaltest.TestEnvVar) == "" {
-		t.Skip(fmt.Sprintf("Acceptance tests skipped unless env '%s' set", logicaltest.TestEnvVar))
-		return
-	}
-
 	b, err := Factory(context.Background(), &logical.BackendConfig{
 		Logger: nil,
 		System: &logical.StaticSystemView{
@@ -210,11 +193,10 @@ func TestBackend_acceptance(t *testing.T) {
 	}
 
 	logicaltest.Test(t, logicaltest.TestCase{
-		Backend:        b,
-		PreCheck:       testAccPreCheck(t, host, port),
-		AcceptanceTest: true,
+		CredentialBackend: b,
+		PreCheck:          testAccPreCheck(t, host, port),
 		Steps: []logicaltest.TestStep{
-			// Login with valid but unknown user will fail because unregistered_user_policies is emtpy
+			// Login with valid but unknown user will fail because unregistered_user_policies is empty
 			testConfigWrite(t, configDataAcceptanceNoAllowUnreg, false),
 			testAccUserLogin(t, username, dataRealpassword, true),
 			// Once the user is registered auth will succeed

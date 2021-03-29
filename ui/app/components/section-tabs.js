@@ -1,14 +1,13 @@
-import Ember from 'ember';
+import Component from '@ember/component';
 
-const SectionTabs = Ember.Component.extend({
+const SectionTabs = Component.extend({
   tagName: '',
-
   model: null,
   tabType: 'authSettings',
 });
 
 SectionTabs.reopenClass({
-  positionalParams: ['model', 'tabType'],
+  positionalParams: ['model', 'tabType', 'paths'],
 });
 
 export default SectionTabs;

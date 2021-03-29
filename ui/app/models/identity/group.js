@@ -1,16 +1,14 @@
-import Ember from 'ember';
+import { belongsTo, attr } from '@ember-data/model';
+import { alias } from '@ember/object/computed';
+import { computed } from '@ember/object';
 import IdentityModel from './_base';
-import DS from 'ember-data';
 import lazyCapabilities, { apiPath } from 'vault/macros/lazy-capabilities';
 import identityCapabilities from 'vault/macros/identity-capabilities';
-
-const { computed } = Ember;
-const { attr, belongsTo } = DS;
 
 export default IdentityModel.extend({
   formFields: computed('type', function() {
     let fields = ['name', 'type', 'policies', 'metadata'];
-    if (this.get('type') === 'internal') {
+    if (this.type === 'internal') {
       return fields.concat(['memberGroupIds', 'memberEntityIds']);
     }
     return fields;
@@ -36,19 +34,28 @@ export default IdentityModel.extend({
     editType: 'kv',
   }),
   policies: attr({
-    editType: 'stringArray',
+    label: 'Policies',
+    editType: 'searchSelect',
+    fallbackComponent: 'string-list',
+    models: ['policy/acl', 'policy/rgp'],
   }),
   memberGroupIds: attr({
     label: 'Member Group IDs',
-    editType: 'stringArray',
+    editType: 'searchSelect',
+    fallbackComponent: 'string-list',
+    models: ['identity/group'],
   }),
   parentGroupIds: attr({
     label: 'Parent Group IDs',
-    editType: 'stringArray',
+    editType: 'searchSelect',
+    fallbackComponent: 'string-list',
+    models: ['identity/group'],
   }),
   memberEntityIds: attr({
     label: 'Member Entity IDs',
-    editType: 'stringArray',
+    editType: 'searchSelect',
+    fallbackComponent: 'string-list',
+    models: ['identity/entity'],
   }),
   hasMembers: computed(
     'memberEntityIds',
@@ -56,7 +63,7 @@ export default IdentityModel.extend({
     'memberGroupIds',
     'memberGroupIds.[]',
     function() {
-      let { memberEntityIds, memberGroupIds } = this.getProperties('memberEntityIds', 'memberGroupIds');
+      let { memberEntityIds, memberGroupIds } = this;
       let numEntities = (memberEntityIds && memberEntityIds.get('length')) || 0;
       let numGroups = (memberGroupIds && memberGroupIds.get('length')) || 0;
       return numEntities + numGroups > 0;
@@ -65,17 +72,17 @@ export default IdentityModel.extend({
 
   alias: belongsTo('identity/group-alias', { async: false, readOnly: true }),
   updatePath: identityCapabilities(),
-  canDelete: computed.alias('updatePath.canDelete'),
-  canEdit: computed.alias('updatePath.canUpdate'),
+  canDelete: alias('updatePath.canDelete'),
+  canEdit: alias('updatePath.canUpdate'),
 
   aliasPath: lazyCapabilities(apiPath`identity/group-alias`),
   canAddAlias: computed('aliasPath.canCreate', 'type', 'alias', function() {
-    let type = this.get('type');
-    let alias = this.get('alias');
+    let type = this.type;
+    let alias = this.alias;
     // internal groups can't have aliases, and external groups can only have one
     if (type === 'internal' || alias) {
       return false;
     }
-    return this.get('aliasPath.canCreate');
+    return this.aliasPath.canCreate;
   }),
 });

@@ -1,49 +1,50 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import { alias, equal } from '@ember/object/computed';
+import Component from '@ember/component';
+import { computed } from '@ember/object';
 import { engines } from 'vault/helpers/mountable-secret-engines';
 import { methods } from 'vault/helpers/mountable-auth-methods';
 import { supportedSecretBackends } from 'vault/helpers/supported-secret-backends';
 const supportedSecrets = supportedSecretBackends();
 import { supportedAuthBackends } from 'vault/helpers/supported-auth-backends';
 const supportedAuth = supportedAuthBackends();
-const { inject, computed } = Ember;
 
-export default Ember.Component.extend({
-  wizard: inject.service(),
-  featureState: computed.alias('wizard.featureState'),
-  currentState: computed.alias('wizard.currentState'),
-  currentMachine: computed.alias('wizard.currentMachine'),
-  mountSubtype: computed.alias('wizard.componentState'),
-  fullNextStep: computed.alias('wizard.nextStep'),
-  nextFeature: computed.alias('wizard.nextFeature'),
+export default Component.extend({
+  wizard: service(),
+  featureState: alias('wizard.featureState'),
+  currentState: alias('wizard.currentState'),
+  currentMachine: alias('wizard.currentMachine'),
+  mountSubtype: alias('wizard.componentState'),
+  fullNextStep: alias('wizard.nextStep'),
+  nextFeature: alias('wizard.nextFeature'),
   nextStep: computed('fullNextStep', function() {
-    return this.get('fullNextStep').split('.').lastObject;
+    return this.fullNextStep.split('.').lastObject;
   }),
-  needsEncryption: computed('mountSubtype', function() {
-    return this.get('mountSubtype') === 'transit';
+  needsConnection: equal('mountSubtype', 'database'),
+  needsEncryption: equal('mountSubtype', 'transit'),
+  stepComponent: alias('wizard.stepComponent'),
+  detailsComponent: computed('currentMachine', 'mountSubtype', function() {
+    let suffix = this.currentMachine === 'secrets' ? 'engine' : 'method';
+    return this.mountSubtype ? `wizard/${this.mountSubtype}-${suffix}` : null;
   }),
-  stepComponent: computed.alias('wizard.stepComponent'),
-  detailsComponent: computed('mountSubtype', function() {
-    let suffix = this.get('currentMachine') === 'secrets' ? 'engine' : 'method';
-    return this.get('mountSubtype') ? `wizard/${this.get('mountSubtype')}-${suffix}` : null;
-  }),
-  isSupported: computed('mountSubtype', function() {
-    if (this.get('currentMachine') === 'secrets') {
-      return supportedSecrets.includes(this.get('mountSubtype'));
+  isSupported: computed('currentMachine', 'mountSubtype', function() {
+    if (this.currentMachine === 'secrets') {
+      return supportedSecrets.includes(this.mountSubtype);
     } else {
-      return supportedAuth.includes(this.get('mountSubtype'));
+      return supportedAuth.includes(this.mountSubtype);
     }
   }),
-  mountName: computed('mountSubtype', function() {
-    if (this.get('currentMachine') === 'secrets') {
+  mountName: computed('currentMachine', 'mountSubtype', function() {
+    if (this.currentMachine === 'secrets') {
       var secret = engines().find(engine => {
-        return engine.type === this.get('mountSubtype');
+        return engine.type === this.mountSubtype;
       });
       if (secret) {
         return secret.displayName;
       }
     } else {
       var auth = methods().find(method => {
-        return method.type === this.get('mountSubtype');
+        return method.type === this.mountSubtype;
       });
       if (auth) {
         return auth.displayName;
@@ -52,13 +53,13 @@ export default Ember.Component.extend({
     return null;
   }),
   actionText: computed('mountSubtype', function() {
-    switch (this.get('mountSubtype')) {
+    switch (this.mountSubtype) {
       case 'aws':
-        return 'Generate Credential';
+        return 'Generate credential';
       case 'ssh':
-        return 'Sign Keys';
+        return 'Sign keys';
       case 'pki':
-        return 'Generate Certificate';
+        return 'Generate certificate';
       default:
         return null;
     }

@@ -1,16 +1,16 @@
+import { alias } from '@ember/object/computed';
+import { computed } from '@ember/object';
 import Base from './_popup-base';
-import Ember from 'ember';
-const { computed } = Ember;
 
 export default Base.extend({
-  model: computed.alias('params.firstObject'),
+  model: alias('params.firstObject'),
 
   groupArray: computed('params', function() {
-    return this.get('params').objectAt(1);
+    return this.params.objectAt(1);
   }),
 
   memberId: computed('params', function() {
-    return this.get('params').objectAt(2);
+    return this.params.objectAt(2);
   }),
 
   messageArgs(/*model, groupArray, memberId*/) {

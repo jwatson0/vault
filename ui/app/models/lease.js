@@ -1,7 +1,6 @@
-import Ember from 'ember';
-import DS from 'ember-data';
-import KeyMixin from './key-mixin';
-const { attr } = DS;
+import Model, { attr } from '@ember-data/model';
+import { match } from '@ember/object/computed';
+import KeyMixin from 'vault/mixins/key-mixin';
 
 /* sample response
 {
@@ -15,11 +14,11 @@ const { attr } = DS;
 
 */
 
-export default DS.Model.extend(KeyMixin, {
+export default Model.extend(KeyMixin, {
   issueTime: attr('string'),
   expireTime: attr('string'),
   lastRenewal: attr('string'),
   renewable: attr('boolean'),
   ttl: attr('number'),
-  isAuthLease: Ember.computed.match('id', /^auth/),
+  isAuthLease: match('id', /^auth/),
 });

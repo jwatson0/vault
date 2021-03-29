@@ -1,14 +1,12 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
 import ClusterRoute from './cluster-route-base';
 
-const { inject } = Ember;
-
 export default ClusterRoute.extend({
-  wizard: inject.service(),
+  wizard: service(),
 
   activate() {
     // always start from idle instead of using the current state
-    this.get('wizard').transitionTutorialMachine('idle', 'INIT');
-    this.get('wizard').set('initEvent', 'START');
+    this.wizard.transitionTutorialMachine('idle', 'INIT');
+    this.wizard.set('initEvent', 'START');
   },
 });

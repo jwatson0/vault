@@ -4,11 +4,17 @@
 .is-underline {
   text-decoration: underline;
 }
+.is-no-underline {
+  text-decoration: none;
+}
 .is-sideless {
   box-shadow: 0 2px 0 -1px $grey-light, 0 -2px 0 -1px $grey-light;
 }
 .is-bottomless {
   box-shadow: 0 -1px 0 0 $grey-light;
+}
+.has-bottom-shadow {
+  box-shadow: $box-shadow !important;
 }
 .is-borderless {
   border: none !important;
@@ -32,6 +38,10 @@
 .is-flex-column {
   display: flex;
   flex-direction: column;
+}
+.is-flex-row {
+  display: flex;
+  flex-direction: row;
 }
 .is-flex-v-centered {
   display: flex;
@@ -88,6 +98,12 @@
 .has-short-padding {
   padding: 0.25rem 1.25rem;
 }
+.has-tall-padding {
+  padding: 2.25rem;
+}
+.has-top-bottom-margin {
+  margin: 1.25rem 0rem;
+}
 
 .is-sideless.has-short-padding {
   padding: 0.25rem 1.25rem;
@@ -113,6 +129,11 @@
 .is-size-9 {
   font-size: $size-9 !important;
 }
+.is-hint {
+  color: $grey;
+  font-size: $size-8;
+  padding: $size-8 0;
+}
 @each $name, $shade in $shades {
   .has-background-#{$name} {
     background: $shade !important;
@@ -131,4 +152,44 @@
   color: $grey;
   font-size: $size-8;
   text-transform: lowercase;
+}
+.has-bottom-margin-xs {
+  margin-bottom: $spacing-xs;
+}
+.has-bottom-margin-s {
+  margin-bottom: $spacing-s;
+}
+.has-bottom-margin-m {
+  margin-bottom: $spacing-m;
+}
+.has-bottom-margin-l {
+  margin-bottom: $spacing-l;
+}
+.has-bottom-margin-xl {
+  margin-bottom: $spacing-xl;
+}
+.has-bottom-margin-xxl {
+  margin-bottom: $spacing-xxl;
+}
+.has-top-margin-s {
+  margin-top: $spacing-s;
+}
+.has-top-margin-xl {
+  margin-top: $spacing-xl;
+}
+.has-border-bottom-light {
+  border-radius: 0;
+  border-bottom: 1px solid $grey-light;
+}
+.has-border-danger {
+  border: 1px solid $danger;
+}
+
+ul.bullet {
+  list-style: disc;
+  padding-left: $spacing-m;
+}
+
+.has-text-semibold {
+  font-weight: $font-weight-semibold;
 }

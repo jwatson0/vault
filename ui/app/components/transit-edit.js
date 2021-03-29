@@ -1,64 +1,65 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import { or } from '@ember/object/computed';
+import { isBlank } from '@ember/utils';
+import Component from '@ember/component';
+import { task, waitForEvent } from 'ember-concurrency';
+import { set, get } from '@ember/object';
+
 import FocusOnInsertMixin from 'vault/mixins/focus-on-insert';
 import keys from 'vault/lib/keycodes';
 
-const { get, set, computed, inject } = Ember;
 const LIST_ROOT_ROUTE = 'vault.cluster.secrets.backend.list-root';
 const SHOW_ROUTE = 'vault.cluster.secrets.backend.show';
 
-export default Ember.Component.extend(FocusOnInsertMixin, {
+export default Component.extend(FocusOnInsertMixin, {
+  router: service(),
+  wizard: service(),
   mode: null,
-  onDataChange: null,
-  refresh: 'refresh',
+  onDataChange() {},
+  onRefresh() {},
   key: null,
-  routing: inject.service('-routing'),
-  requestInFlight: computed.or('key.isLoading', 'key.isReloading', 'key.isSaving'),
-  wizard: inject.service(),
-
-  init() {
-    this._super(...arguments);
-  },
+  requestInFlight: or('key.isLoading', 'key.isReloading', 'key.isSaving'),
 
   willDestroyElement() {
-    const key = this.get('key');
-    if (get(key, 'isError')) {
-      key.rollbackAttributes();
+    this._super(...arguments);
+    if (this.key && this.key.isError) {
+      this.key.rollbackAttributes();
     }
   },
 
+  waitForKeyUp: task(function*() {
+    while (true) {
+      let event = yield waitForEvent(document.body, 'keyup');
+      this.onEscape(event);
+    }
+  })
+    .on('didInsertElement')
+    .cancelOn('willDestroyElement'),
+
   transitionToRoute() {
-    const router = this.get('routing.router');
-    router.transitionTo.apply(router, arguments);
+    this.router.transitionTo(...arguments);
   },
 
-  bindKeys: Ember.on('didInsertElement', function() {
-    Ember.$(document).on('keyup.keyEdit', this.onEscape.bind(this));
-  }),
-
-  unbindKeys: Ember.on('willDestroyElement', function() {
-    Ember.$(document).off('keyup.keyEdit');
-  }),
-
   onEscape(e) {
-    if (e.keyCode !== keys.ESC || this.get('mode') !== 'show') {
+    if (e.keyCode !== keys.ESC || this.mode !== 'show') {
       return;
     }
     this.transitionToRoute(LIST_ROOT_ROUTE);
   },
 
   hasDataChanges() {
-    get(this, 'onDataChange')(get(this, 'key.hasDirtyAttributes'));
+    this.onDataChange(this.key.hasDirtyAttributes);
   },
 
   persistKey(method, successCallback) {
-    const key = get(this, 'key');
+    const key = this.key;
     return key[method]().then(() => {
-      if (!Ember.get(key, 'isError')) {
-        if (this.get('wizard.featureState') === 'secret') {
-          this.get('wizard').transitionFeatureMachine('secret', 'CONTINUE');
+      if (!get(key, 'isError')) {
+        if (this.wizard.featureState === 'secret') {
+          this.wizard.transitionFeatureMachine('secret', 'CONTINUE');
         } else {
-          if (this.get('wizard.featureState') === 'encryption') {
-            this.get('wizard').transitionFeatureMachine('encryption', 'CONTINUE', 'transit');
+          if (this.wizard.featureState === 'encryption') {
+            this.wizard.transitionFeatureMachine('encryption', 'CONTINUE', 'transit');
           }
         }
         successCallback(key);
@@ -67,25 +68,13 @@ export default Ember.Component.extend(FocusOnInsertMixin, {
   },
 
   actions: {
-    handleKeyDown(_, e) {
-      e.stopPropagation();
-      if (!(e.keyCode === keys.ENTER && e.metaKey)) {
-        return;
-      }
-      let $form = this.$('form');
-      if ($form.length) {
-        $form.submit();
-      }
-      $form = null;
-    },
-
     createOrUpdateKey(type, event) {
       event.preventDefault();
 
-      const keyId = this.get('key.id');
+      const keyId = this.key.id || this.key.name;
       // prevent from submitting if there's no key
       // maybe do something fancier later
-      if (type === 'create' && Ember.isBlank(keyId)) {
+      if (type === 'create' && isBlank(keyId)) {
         return;
       }
 
@@ -99,24 +88,20 @@ export default Ember.Component.extend(FocusOnInsertMixin, {
       );
     },
 
-    handleChange() {
-      this.hasDataChanges();
-    },
-
     setValueOnKey(key, event) {
-      set(get(this, 'key'), key, event.target.checked);
+      set(this.key, key, event.target.checked);
     },
 
     derivedChange(val) {
-      get(this, 'key').setDerived(val);
+      this.key.setDerived(val);
     },
 
     convergentEncryptionChange(val) {
-      get(this, 'key').setConvergentEncryption(val);
+      this.key.setConvergentEncryption(val);
     },
 
     refresh() {
-      this.sendAction('refresh');
+      this.onRefresh();
     },
 
     deleteKey() {

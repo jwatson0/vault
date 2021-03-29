@@ -14,7 +14,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/errwrap"
-	"github.com/hashicorp/vault/logical"
+	"github.com/hashicorp/vault/sdk/helper/parseutil"
+	"github.com/hashicorp/vault/sdk/logical"
 
 	log "github.com/hashicorp/go-hclog"
 	"golang.org/x/crypto/ssh"
@@ -101,8 +102,7 @@ func (b *backend) installPublicKeyInTarget(ctx context.Context, adminUser, usern
 	rmCmd := fmt.Sprintf("rm -f %s", scriptFileName)
 	targetCmd := fmt.Sprintf("%s;%s;%s", chmodCmd, scriptCmd, rmCmd)
 
-	session.Run(targetCmd)
-	return nil
+	return session.Run(targetCmd)
 }
 
 // Takes an IP address and role name and checks if the IP is part
@@ -154,6 +154,13 @@ func cidrListContainsIP(ip, cidrList string) (bool, error) {
 	return false, nil
 }
 
+func insecureIgnoreHostWarning(logger log.Logger) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		logger.Warn("cannot verify server key: host key validation disabled")
+		return nil
+	}
+}
+
 func createSSHComm(logger log.Logger, username, ip string, port int, hostkey string) (*comm, error) {
 	signer, err := ssh.ParsePrivateKey([]byte(hostkey))
 	if err != nil {
@@ -165,7 +172,7 @@ func createSSHComm(logger log.Logger, username, ip string, port int, hostkey str
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: insecureIgnoreHostWarning(logger),
 	}
 
 	connfunc := func() (net.Conn, error) {
@@ -213,6 +220,18 @@ func convertMapToStringValue(initial map[string]interface{}) map[string]string {
 		result[key] = fmt.Sprintf("%v", value)
 	}
 	return result
+}
+
+func convertMapToIntValue(initial map[string]interface{}) (map[string]int, error) {
+	result := map[string]int{}
+	for key, value := range initial {
+		v, err := parseutil.ParseInt(value)
+		if err != nil {
+			return nil, err
+		}
+		result[key] = int(v)
+	}
+	return result, nil
 }
 
 // Serve a template processor for custom format inputs

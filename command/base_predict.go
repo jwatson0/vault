@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/sdk/helper/consts"
 	"github.com/posener/complete"
 )
 
@@ -127,6 +128,12 @@ func (b *BaseCommand) PredictVaultFolders() complete.Predictor {
 	return NewPredict().VaultFolders()
 }
 
+// PredictVaultNamespaces returns a predictor for "namespaces". See PredictVaultFiles
+// for more information an restrictions.
+func (b *BaseCommand) PredictVaultNamespaces() complete.Predictor {
+	return NewPredict().VaultNamespaces()
+}
+
 // PredictVaultMounts returns a predictor for "folders". See PredictVaultFiles
 // for more information and restrictions.
 func (b *BaseCommand) PredictVaultMounts() complete.Predictor {
@@ -146,14 +153,25 @@ func (b *BaseCommand) PredictVaultAuths() complete.Predictor {
 }
 
 // PredictVaultPlugins returns a predictor for installed plugins.
-func (b *BaseCommand) PredictVaultPlugins() complete.Predictor {
-	return NewPredict().VaultPlugins()
+func (b *BaseCommand) PredictVaultPlugins(pluginTypes ...consts.PluginType) complete.Predictor {
+	return NewPredict().VaultPlugins(pluginTypes...)
 }
 
 // PredictVaultPolicies returns a predictor for "folders". See PredictVaultFiles
 // for more information and restrictions.
 func (b *BaseCommand) PredictVaultPolicies() complete.Predictor {
 	return NewPredict().VaultPolicies()
+}
+
+func (b *BaseCommand) PredictVaultDebugTargets() complete.Predictor {
+	return complete.PredictSet(
+		"config",
+		"host",
+		"metrics",
+		"pprof",
+		"replication-status",
+		"server-status",
+	)
 }
 
 // VaultFiles returns a predictor for Vault "files". This is a public API for
@@ -167,6 +185,13 @@ func (p *Predict) VaultFiles() complete.Predictor {
 // instead.
 func (p *Predict) VaultFolders() complete.Predictor {
 	return p.vaultPaths(false)
+}
+
+// VaultNamespaces returns a predictor for Vault "namespaces". This is a public
+// API for consumers, but you probably want BaseCommand.PredictVaultNamespaces
+// instead.
+func (p *Predict) VaultNamespaces() complete.Predictor {
+	return p.filterFunc(p.namespaces)
 }
 
 // VaultMounts returns a predictor for Vault "folders". This is a public
@@ -191,8 +216,11 @@ func (p *Predict) VaultAuths() complete.Predictor {
 // VaultPlugins returns a predictor for Vault's plugin catalog. This is a public
 // API for consumers, but you probably want BaseCommand.PredictVaultPlugins
 // instead.
-func (p *Predict) VaultPlugins() complete.Predictor {
-	return p.filterFunc(p.plugins)
+func (p *Predict) VaultPlugins(pluginTypes ...consts.PluginType) complete.Predictor {
+	filterFunc := func() []string {
+		return p.plugins(pluginTypes...)
+	}
+	return p.filterFunc(filterFunc)
 }
 
 // VaultPolicies returns a predictor for Vault "folders". This is a public API for
@@ -218,8 +246,18 @@ func (p *Predict) vaultPaths(includeFiles bool) complete.PredictFunc {
 
 		path := args.Last
 
+		// Trim path with potential mount
+		var relativePath string
+		for _, mount := range p.mounts() {
+			if strings.HasPrefix(path, mount) {
+				relativePath = strings.TrimPrefix(path, mount+"/")
+				break
+			}
+		}
+
+		// Predict path or mount depending on path separator
 		var predictions []string
-		if strings.Contains(path, "/") {
+		if strings.Contains(relativePath, "/") {
 			predictions = p.paths(path, includeFiles)
 		} else {
 			predictions = p.filter(p.mounts(), path)
@@ -329,17 +367,38 @@ func (p *Predict) auths() []string {
 }
 
 // plugins returns a sorted list of the plugins in the catalog.
-func (p *Predict) plugins() []string {
+func (p *Predict) plugins(pluginTypes ...consts.PluginType) []string {
+	// This method's signature doesn't enforce that a pluginType must be passed in.
+	// If it's not, it's likely the caller's intent is go get a list of all of them,
+	// so let's help them out.
+	if len(pluginTypes) == 0 {
+		pluginTypes = append(pluginTypes, consts.PluginTypeUnknown)
+	}
+
 	client := p.Client()
 	if client == nil {
 		return nil
 	}
 
-	result, err := client.Sys().ListPlugins(nil)
-	if err != nil {
-		return nil
+	var plugins []string
+	pluginsAdded := make(map[string]bool)
+	for _, pluginType := range pluginTypes {
+		result, err := client.Sys().ListPlugins(&api.ListPluginsInput{Type: pluginType})
+		if err != nil {
+			return nil
+		}
+		if result == nil {
+			return nil
+		}
+		for _, names := range result.PluginsByType {
+			for _, name := range names {
+				if _, ok := pluginsAdded[name]; !ok {
+					plugins = append(plugins, name)
+					pluginsAdded[name] = true
+				}
+			}
+		}
 	}
-	plugins := result.Names
 	sort.Strings(plugins)
 	return plugins
 }
@@ -377,6 +436,36 @@ func (p *Predict) mounts() []string {
 	list := make([]string, 0, len(mounts))
 	for m := range mounts {
 		list = append(list, m)
+	}
+	sort.Strings(list)
+	return list
+}
+
+// namespaces returns a sorted list of the namespace paths for Vault server for
+// which the client is configured to communicate with. This function returns
+// an empty list in any error occurs.
+func (p *Predict) namespaces() []string {
+	client := p.Client()
+	if client == nil {
+		return nil
+	}
+
+	secret, err := client.Logical().List("sys/namespaces")
+	if err != nil {
+		return nil
+	}
+	namespaces, ok := extractListData(secret)
+	if !ok {
+		return nil
+	}
+
+	list := make([]string, 0, len(namespaces))
+	for _, n := range namespaces {
+		s, ok := n.(string)
+		if !ok {
+			continue
+		}
+		list = append(list, s)
 	}
 	sort.Strings(list)
 	return list

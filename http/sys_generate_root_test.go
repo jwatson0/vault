@@ -1,17 +1,21 @@
 package http
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 	"testing"
 
-	"github.com/hashicorp/go-uuid"
+	"github.com/go-test/deep"
+	"github.com/hashicorp/vault/helper/namespace"
 	"github.com/hashicorp/vault/helper/pgpkeys"
 	"github.com/hashicorp/vault/helper/xor"
+	"github.com/hashicorp/vault/sdk/logical"
 	"github.com/hashicorp/vault/vault"
 )
 
@@ -36,11 +40,13 @@ func TestSysGenerateRootAttempt_Status(t *testing.T) {
 		"encoded_root_token": "",
 		"pgp_fingerprint":    "",
 		"nonce":              "",
+		"otp_length":         json.Number("26"),
 	}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &actual)
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual)
+	expected["otp"] = actual["otp"]
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Fatal(diff)
 	}
 }
 
@@ -50,15 +56,7 @@ func TestSysGenerateRootAttempt_Setup_OTP(t *testing.T) {
 	defer ln.Close()
 	TestServerAuth(t, addr, token)
 
-	otpBytes, err := vault.GenerateRandBytes(16)
-	if err != nil {
-		t.Fatal(err)
-	}
-	otp := base64.StdEncoding.EncodeToString(otpBytes)
-
-	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", map[string]interface{}{
-		"otp": otp,
-	})
+	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", nil)
 	testResponseStatus(t, resp, 200)
 
 	var actual map[string]interface{}
@@ -70,6 +68,7 @@ func TestSysGenerateRootAttempt_Setup_OTP(t *testing.T) {
 		"encoded_token":      "",
 		"encoded_root_token": "",
 		"pgp_fingerprint":    "",
+		"otp_length":         json.Number("26"),
 	}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &actual)
@@ -77,8 +76,9 @@ func TestSysGenerateRootAttempt_Setup_OTP(t *testing.T) {
 		t.Fatalf("nonce was empty")
 	}
 	expected["nonce"] = actual["nonce"]
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual)
+	expected["otp"] = actual["otp"]
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Fatal(diff)
 	}
 
 	resp = testHttpGet(t, token, addr+"/v1/sys/generate-root/attempt")
@@ -92,6 +92,8 @@ func TestSysGenerateRootAttempt_Setup_OTP(t *testing.T) {
 		"encoded_token":      "",
 		"encoded_root_token": "",
 		"pgp_fingerprint":    "",
+		"otp":                "",
+		"otp_length":         json.Number("26"),
 	}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &actual)
@@ -126,6 +128,8 @@ func TestSysGenerateRootAttempt_Setup_PGP(t *testing.T) {
 		"encoded_token":      "",
 		"encoded_root_token": "",
 		"pgp_fingerprint":    "816938b8a29146fbe245dd29e7cbaf8e011db793",
+		"otp":                "",
+		"otp_length":         json.Number("26"),
 	}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &actual)
@@ -133,8 +137,8 @@ func TestSysGenerateRootAttempt_Setup_PGP(t *testing.T) {
 		t.Fatalf("nonce was empty")
 	}
 	expected["nonce"] = actual["nonce"]
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual)
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Fatal(diff)
 	}
 }
 
@@ -144,15 +148,7 @@ func TestSysGenerateRootAttempt_Cancel(t *testing.T) {
 	defer ln.Close()
 	TestServerAuth(t, addr, token)
 
-	otpBytes, err := vault.GenerateRandBytes(16)
-	if err != nil {
-		t.Fatal(err)
-	}
-	otp := base64.StdEncoding.EncodeToString(otpBytes)
-
-	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", map[string]interface{}{
-		"otp": otp,
-	})
+	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", nil)
 
 	var actual map[string]interface{}
 	expected := map[string]interface{}{
@@ -163,6 +159,7 @@ func TestSysGenerateRootAttempt_Cancel(t *testing.T) {
 		"encoded_token":      "",
 		"encoded_root_token": "",
 		"pgp_fingerprint":    "",
+		"otp_length":         json.Number("26"),
 	}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &actual)
@@ -170,14 +167,15 @@ func TestSysGenerateRootAttempt_Cancel(t *testing.T) {
 		t.Fatalf("nonce was empty")
 	}
 	expected["nonce"] = actual["nonce"]
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual)
+	expected["otp"] = actual["otp"]
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Fatal(diff)
 	}
 
 	resp = testHttpDelete(t, token, addr+"/v1/sys/generate-root/attempt")
 	testResponseStatus(t, resp, 204)
 
-	resp, err = http.Get(addr + "/v1/sys/generate-root/attempt")
+	resp, err := http.Get(addr + "/v1/sys/generate-root/attempt")
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -192,6 +190,8 @@ func TestSysGenerateRootAttempt_Cancel(t *testing.T) {
 		"encoded_root_token": "",
 		"pgp_fingerprint":    "",
 		"nonce":              "",
+		"otp":                "",
+		"otp_length":         json.Number("26"),
 	}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &actual)
@@ -200,23 +200,58 @@ func TestSysGenerateRootAttempt_Cancel(t *testing.T) {
 	}
 }
 
-func TestSysGenerateRoot_badKey(t *testing.T) {
-	core, _, token := vault.TestCoreUnsealed(t)
-	ln, addr := TestServer(t, core)
-	defer ln.Close()
-	TestServerAuth(t, addr, token)
-
-	otpBytes, err := vault.GenerateRandBytes(16)
+func enableNoopAudit(t *testing.T, token string, core *vault.Core) {
+	t.Helper()
+	auditReq := &logical.Request{
+		Operation:   logical.UpdateOperation,
+		ClientToken: token,
+		Path:        "sys/audit/noop",
+		Data: map[string]interface{}{
+			"type": "noop",
+		},
+	}
+	resp, err := core.HandleRequest(namespace.RootContext(context.Background()), auditReq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	otp := base64.StdEncoding.EncodeToString(otpBytes)
+
+	if resp.IsError() {
+		t.Fatal(err)
+	}
+}
+
+func testCoreUnsealedWithAudit(t *testing.T, records **[][]byte) (*vault.Core, [][]byte, string) {
+	conf := &vault.CoreConfig{
+		BuiltinRegistry: vault.NewMockBuiltinRegistry(),
+	}
+	vault.AddNoopAudit(conf, records)
+	core, keys, token := vault.TestCoreUnsealedWithConfig(t, conf)
+	return core, keys, token
+}
+
+func testServerWithAudit(t *testing.T, records **[][]byte) (net.Listener, string, string, [][]byte) {
+	core, keys, token := testCoreUnsealedWithAudit(t, records)
+	ln, addr := TestServer(t, core)
+	TestServerAuth(t, addr, token)
+	enableNoopAudit(t, token, core)
+	return ln, addr, token, keys
+}
+
+func TestSysGenerateRoot_badKey(t *testing.T) {
+	var records *[][]byte
+	ln, addr, token, _ := testServerWithAudit(t, &records)
+	defer ln.Close()
 
 	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/update", map[string]interface{}{
 		"key": "0123",
-		"otp": otp,
 	})
 	testResponseStatus(t, resp, 400)
+
+	if len(*records) < 3 {
+		// One record for enabling the noop audit device, two for generate root attempt
+		t.Fatalf("expected at least 3 audit records, got %d", len(*records))
+	}
+	t.Log(string((*records)[2]))
 }
 
 func TestSysGenerateRoot_ReAttemptUpdate(t *testing.T) {
@@ -225,14 +260,7 @@ func TestSysGenerateRoot_ReAttemptUpdate(t *testing.T) {
 	defer ln.Close()
 	TestServerAuth(t, addr, token)
 
-	otpBytes, err := vault.GenerateRandBytes(16)
-	if err != nil {
-		t.Fatal(err)
-	}
-	otp := base64.StdEncoding.EncodeToString(otpBytes)
-	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", map[string]interface{}{
-		"otp": otp,
-	})
+	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", nil)
 	testResponseStatus(t, resp, 200)
 
 	resp = testHttpDelete(t, token, addr+"/v1/sys/generate-root/attempt")
@@ -246,23 +274,15 @@ func TestSysGenerateRoot_ReAttemptUpdate(t *testing.T) {
 }
 
 func TestSysGenerateRoot_Update_OTP(t *testing.T) {
-	core, keys, token := vault.TestCoreUnsealed(t)
-	ln, addr := TestServer(t, core)
+	var records *[][]byte
+	ln, addr, token, keys := testServerWithAudit(t, &records)
 	defer ln.Close()
-	TestServerAuth(t, addr, token)
 
-	otpBytes, err := vault.GenerateRandBytes(16)
-	if err != nil {
-		t.Fatal(err)
-	}
-	otp := base64.StdEncoding.EncodeToString(otpBytes)
-
-	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", map[string]interface{}{
-		"otp": otp,
-	})
+	resp := testHttpPut(t, token, addr+"/v1/sys/generate-root/attempt", map[string]interface{}{})
 	var rootGenerationStatus map[string]interface{}
 	testResponseStatus(t, resp, 200)
 	testResponseBody(t, resp, &rootGenerationStatus)
+	otp := rootGenerationStatus["otp"].(string)
 
 	var actual map[string]interface{}
 	var expected map[string]interface{}
@@ -280,6 +300,8 @@ func TestSysGenerateRoot_Update_OTP(t *testing.T) {
 			"required":        json.Number(fmt.Sprintf("%d", len(keys))),
 			"started":         true,
 			"pgp_fingerprint": "",
+			"otp":             "",
+			"otp_length":      json.Number("0"),
 		}
 		if i+1 == len(keys) {
 			expected["complete"] = true
@@ -296,19 +318,22 @@ func TestSysGenerateRoot_Update_OTP(t *testing.T) {
 	}
 	expected["encoded_token"] = actual["encoded_token"]
 	expected["encoded_root_token"] = actual["encoded_root_token"]
+	expected["encoded_token"] = actual["encoded_token"]
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual)
 	}
 
-	decodedToken, err := xor.XORBase64(otp, actual["encoded_root_token"].(string))
+	tokenBytes, err := base64.RawStdEncoding.DecodeString(expected["encoded_token"].(string))
 	if err != nil {
 		t.Fatal(err)
 	}
-	newRootToken, err := uuid.FormatUUID(decodedToken)
+
+	tokenBytes, err = xor.XORBytes(tokenBytes, []byte(otp))
 	if err != nil {
 		t.Fatal(err)
 	}
+	newRootToken := string(tokenBytes)
 
 	actual = map[string]interface{}{}
 	expected = map[string]interface{}{
@@ -324,6 +349,7 @@ func TestSysGenerateRoot_Update_OTP(t *testing.T) {
 		"explicit_max_ttl": json.Number("0"),
 		"expire_time":      nil,
 		"entity_id":        "",
+		"type":             "service",
 	}
 
 	resp = testHttpGet(t, newRootToken, addr+"/v1/auth/token/lookup-self")
@@ -335,6 +361,10 @@ func TestSysGenerateRoot_Update_OTP(t *testing.T) {
 
 	if !reflect.DeepEqual(actual["data"], expected) {
 		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual["data"])
+	}
+
+	for _, r := range *records {
+		t.Log(string(r))
 	}
 }
 
@@ -374,6 +404,8 @@ func TestSysGenerateRoot_Update_PGP(t *testing.T) {
 			"required":        json.Number(fmt.Sprintf("%d", len(keys))),
 			"started":         true,
 			"pgp_fingerprint": "816938b8a29146fbe245dd29e7cbaf8e011db793",
+			"otp":             "",
+			"otp_length":      json.Number("0"),
 		}
 		if i+1 == len(keys) {
 			expected["complete"] = true
@@ -390,12 +422,13 @@ func TestSysGenerateRoot_Update_PGP(t *testing.T) {
 	}
 	expected["encoded_token"] = actual["encoded_token"]
 	expected["encoded_root_token"] = actual["encoded_root_token"]
+	expected["encoded_token"] = actual["encoded_token"]
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual)
 	}
 
-	decodedTokenBuf, err := pgpkeys.DecryptBytes(actual["encoded_root_token"].(string), pgpkeys.TestPrivKey1)
+	decodedTokenBuf, err := pgpkeys.DecryptBytes(actual["encoded_token"].(string), pgpkeys.TestPrivKey1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,6 +452,7 @@ func TestSysGenerateRoot_Update_PGP(t *testing.T) {
 		"explicit_max_ttl": json.Number("0"),
 		"expire_time":      nil,
 		"entity_id":        "",
+		"type":             "service",
 	}
 
 	resp = testHttpGet(t, newRootToken, addr+"/v1/auth/token/lookup-self")
@@ -428,7 +462,7 @@ func TestSysGenerateRoot_Update_PGP(t *testing.T) {
 	expected["creation_time"] = actual["data"].(map[string]interface{})["creation_time"]
 	expected["accessor"] = actual["data"].(map[string]interface{})["accessor"]
 
-	if !reflect.DeepEqual(actual["data"], expected) {
-		t.Fatalf("\nexpected: %#v\nactual: %#v", expected, actual["data"])
+	if diff := deep.Equal(actual["data"], expected); diff != nil {
+		t.Fatal(diff)
 	}
 }

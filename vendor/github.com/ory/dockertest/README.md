@@ -13,7 +13,6 @@ Use Docker to run your Go language integration tests against third party service
 - [Installing and using Dockertest](#installing-and-using-dockertest)
   - [Using Dockertest](#using-dockertest)
   - [Examples](#examples)
-  - [Setting up Travis-CI](#setting-up-travis-ci)
 - [Troubleshoot & FAQ](#troubleshoot-&-faq)
   - [Out of disk space](#out-of-disk-space)
   - [Removing old containers](#removing-old-containers)
@@ -47,13 +46,14 @@ dep ensure -add github.com/ory/dockertest@v3.x.y
 package dockertest_test
 
 import (
-	"testing"
-	"log"
-	"github.com/ory/dockertest"
-	_ "github.com/go-sql-driver/mysql"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
+	"testing"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/ory/dockertest"
 )
 
 var db *sql.DB
@@ -102,19 +102,6 @@ func TestSomething(t *testing.T) {
 
 We provide code examples for well known services in the [examples](examples/) directory, check them out!
 
-### Setting up Travis-CI
-
-You can run the Docker integration on Travis easily:
-
-```yml
-# Sudo is required for docker
-sudo: required
-
-# Enable docker
-services:
-  - docker
-```
-
 ## Troubleshoot & FAQ
 
 ### Out of disk space
@@ -124,4 +111,8 @@ Try cleaning up the images with [docker-cleanup-volumes](https://github.com/chad
 ### Removing old containers
 
 Sometimes container clean up fails. Check out
-[this stackoverflow question](http://stackoverflow.com/questions/21398087/how-to-delete-dockers-images) on how to fix this.
+[this stackoverflow question](http://stackoverflow.com/questions/21398087/how-to-delete-dockers-images) on how to fix this. You may also set an absolute lifetime on containers: 
+
+```go
+resource.Expire(60) // Tell docker to hard kill the container in 60 seconds
+```

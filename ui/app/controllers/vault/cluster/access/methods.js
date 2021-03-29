@@ -1,7 +1,7 @@
-import Ember from 'ember';
+import Controller from '@ember/controller';
 import { task } from 'ember-concurrency';
 
-export default Ember.Controller.extend({
+export default Controller.extend({
   queryParams: {
     page: 'page',
     pageFilter: 'pageFilter',
@@ -12,13 +12,13 @@ export default Ember.Controller.extend({
   filter: null,
 
   disableMethod: task(function*(method) {
-    const { type, path } = method.getProperties('type', 'path');
+    const { type, path } = method;
     try {
       yield method.destroyRecord();
-      this.get('flashMessages').success(`The ${type} auth method at ${path} has been disabled.`);
+      this.flashMessages.success(`The ${type} Auth Method at ${path} has been disabled.`);
     } catch (err) {
-      this.get('flashMessages').danger(
-        `There was an error disabling auth method at ${path}: ${err.errors.join(' ')}.`
+      this.flashMessages.danger(
+        `There was an error disabling Auth Method at ${path}: ${err.errors.join(' ')}.`
       );
     }
   }).drop(),

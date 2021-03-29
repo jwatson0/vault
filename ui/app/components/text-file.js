@@ -1,8 +1,7 @@
-import Ember from 'ember';
+import Component from '@ember/component';
+import { set } from '@ember/object';
 
-const { set } = Ember;
-
-export default Ember.Component.extend({
+export default Component.extend({
   'data-test-component': 'text-file',
   classNames: ['box', 'is-fullwidth', 'is-marginless', 'is-shadowless'],
   classNameBindings: ['inputOnly:is-paddingless'],
@@ -60,7 +59,7 @@ export default Ember.Component.extend({
   },
 
   setFile(contents, filename) {
-    this.get('onChange')(this.get('index'), { value: contents, fileName: filename });
+    this.onChange(this.index, { value: contents, fileName: filename });
   },
 
   actions: {
@@ -74,12 +73,12 @@ export default Ember.Component.extend({
       }
     },
     updateData(e) {
-      const file = this.get('file');
+      const file = this.file;
       set(file, 'value', e.target.value);
-      this.get('onChange')(this.get('index'), this.get('file'));
+      this.onChange(this.index, this.file);
     },
     clearFile() {
-      this.get('onChange')(this.get('index'), { value: '' });
+      this.onChange(this.index, { value: '' });
     },
   },
 });

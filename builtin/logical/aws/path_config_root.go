@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/hashicorp/vault/logical"
-	"github.com/hashicorp/vault/logical/framework"
+	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/logical"
 )
 
-func pathConfigRoot() *framework.Path {
+func pathConfigRoot(b *backend) *framework.Path {
 	return &framework.Path{
 		Pattern: "config/root",
 		Fields: map[string]*framework.FieldSchema{
@@ -42,7 +42,8 @@ func pathConfigRoot() *framework.Path {
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation: pathConfigRootWrite,
+			logical.ReadOperation:   b.pathConfigRootRead,
+			logical.UpdateOperation: b.pathConfigRootWrite,
 		},
 
 		HelpSynopsis:    pathConfigRootHelpSyn,
@@ -50,11 +51,44 @@ func pathConfigRoot() *framework.Path {
 	}
 }
 
-func pathConfigRootWrite(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) pathConfigRootRead(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	b.clientMutex.RLock()
+	defer b.clientMutex.RUnlock()
+
+	entry, err := req.Storage.Get(ctx, "config/root")
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, nil
+	}
+
+	var config rootConfig
+
+	if err := entry.DecodeJSON(&config); err != nil {
+		return nil, err
+	}
+
+	configData := map[string]interface{}{
+		"access_key":   config.AccessKey,
+		"region":       config.Region,
+		"iam_endpoint": config.IAMEndpoint,
+		"sts_endpoint": config.STSEndpoint,
+		"max_retries":  config.MaxRetries,
+	}
+	return &logical.Response{
+		Data: configData,
+	}, nil
+}
+
+func (b *backend) pathConfigRootWrite(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	region := data.Get("region").(string)
 	iamendpoint := data.Get("iam_endpoint").(string)
 	stsendpoint := data.Get("sts_endpoint").(string)
 	maxretries := data.Get("max_retries").(int)
+
+	b.clientMutex.Lock()
+	defer b.clientMutex.Unlock()
 
 	entry, err := logical.StorageEntryJSON("config/root", rootConfig{
 		AccessKey:   data.Get("access_key").(string),
@@ -71,6 +105,11 @@ func pathConfigRootWrite(ctx context.Context, req *logical.Request, data *framew
 	if err := req.Storage.Put(ctx, entry); err != nil {
 		return nil, err
 	}
+
+	// clear possible cached IAM / STS clients after successfully updating
+	// config/root
+	b.iamClient = nil
+	b.stsClient = nil
 
 	return nil, nil
 }

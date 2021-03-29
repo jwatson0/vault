@@ -1,4 +1,6 @@
-import Ember from 'ember';
+import { helper as buildHelper } from '@ember/component/helper';
+import { capitalize } from '@ember/string';
+import { assign } from '@ember/polyfills';
 
 const DEFAULT_DISPLAY = {
   searchPlaceholder: 'Filter secrets',
@@ -53,6 +55,80 @@ const SECRET_BACKENDS = {
     editComponent: 'role-ssh-edit',
     listItemPartial: 'partials/secret-list/ssh-role-item',
   },
+  database: {
+    displayName: 'Database',
+    navigateTree: false,
+    listItemPartial: 'partials/secret-list/database-list-item',
+    hasOverview: true,
+    tabs: [
+      {
+        name: 'connection',
+        label: 'Connections',
+        searchPlaceholder: 'Filter connections',
+        item: 'connection',
+        create: 'Create connection',
+        editComponent: 'database-connection',
+        checkCapabilitiesPath: 'config',
+      },
+      {
+        name: 'role',
+        modelPrefix: 'role/',
+        label: 'Roles',
+        searchPlaceholder: 'Filter roles',
+        item: 'role',
+        create: 'Create role',
+        tab: 'role',
+        editComponent: 'database-role-edit',
+        checkCapabilitiesPath: 'roles',
+      },
+    ],
+  },
+  transform: {
+    displayName: 'Transformation',
+    navigateTree: false,
+    listItemPartial: 'partials/secret-list/transform-list-item',
+    tabs: [
+      {
+        name: 'transformations',
+        label: 'Transformations',
+        searchPlaceholder: 'Filter transformations',
+        item: 'transformation',
+        create: 'Create transformation',
+        editComponent: 'transformation-edit',
+        listItemPartial: 'partials/secret-list/transform-transformation-item',
+      },
+      {
+        name: 'role',
+        modelPrefix: 'role/',
+        label: 'Roles',
+        searchPlaceholder: 'Filter roles',
+        item: 'role',
+        create: 'Create role',
+        tab: 'role',
+        editComponent: 'transform-role-edit',
+      },
+      {
+        name: 'template',
+        modelPrefix: 'template/',
+        label: 'Templates',
+        searchPlaceholder: 'Filter templates',
+        item: 'template',
+        create: 'Create template',
+        tab: 'template',
+        editComponent: 'transform-template-edit',
+      },
+      {
+        name: 'alphabet',
+        modelPrefix: 'alphabet/',
+        label: 'Alphabets',
+        searchPlaceholder: 'Filter alphabets',
+        item: 'alphabet',
+        create: 'Create alphabet',
+        tab: 'alphabet',
+        editComponent: 'alphabet-edit',
+      },
+    ],
+  },
   transit: {
     searchPlaceholder: 'Filter keys',
     item: 'key',
@@ -70,15 +146,15 @@ export function optionsForBackend([backend, tab]) {
   if (selected && selected.tabs) {
     let tabData =
       selected.tabs.findBy('name', tab) || selected.tabs.findBy('modelPrefix', tab) || selected.tabs[0];
-    backendOptions = Ember.assign({}, selected, tabData);
+    backendOptions = assign({}, selected, tabData);
   } else if (selected) {
     backendOptions = selected;
   } else {
-    backendOptions = Ember.assign({}, DEFAULT_DISPLAY, {
-      displayName: backend === 'kv' ? 'KV' : Ember.String.capitalize(backend),
+    backendOptions = assign({}, DEFAULT_DISPLAY, {
+      displayName: backend === 'kv' ? 'KV' : capitalize(backend),
     });
   }
   return backendOptions;
 }
 
-export default Ember.Helper.helper(optionsForBackend);
+export default buildHelper(optionsForBackend);

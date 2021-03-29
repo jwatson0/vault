@@ -1,9 +1,7 @@
-import Ember from 'ember';
-import DS from 'ember-data';
+import { attr } from '@ember-data/model';
+import { copy } from 'ember-copy';
+import { computed } from '@ember/object';
 import Certificate from './pki-certificate-sign';
-
-const { attr } = DS;
-const { computed } = Ember;
 
 export default Certificate.extend({
   backend: attr('string', {
@@ -68,10 +66,10 @@ export default Certificate.extend({
         default: ['csr', 'commonName', 'format', 'useCsrValues'],
       },
     ];
-    if (this.get('useCsrValues') === false) {
+    if (this.useCsrValues === false) {
       groups = groups.concat(options);
     }
 
-    return this.fieldsToAttrs(Ember.copy(groups, true));
+    return this.fieldsToAttrs(copy(groups, true));
   }),
 });

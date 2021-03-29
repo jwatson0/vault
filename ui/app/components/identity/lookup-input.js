@@ -1,13 +1,12 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import Component from '@ember/component';
 import { task } from 'ember-concurrency';
 import { underscore } from 'vault/helpers/underscore';
 
-const { inject } = Ember;
-
-export default Ember.Component.extend({
-  store: inject.service(),
-  flashMessages: inject.service(),
-  routing: inject.service('-routing'),
+export default Component.extend({
+  store: service(),
+  flashMessages: service(),
+  router: service(),
 
   // Public API - either 'entity' or 'group'
   // this will determine which adapter is used to make the lookup call
@@ -21,24 +20,20 @@ export default Ember.Component.extend({
 
   init() {
     this._super(...arguments);
-    this.get('store').findAll('auth-method').then(methods => {
+    this.store.findAll('auth-method').then(methods => {
       this.set('authMethods', methods);
       this.set('aliasMountAccessor', methods.get('firstObject.accessor'));
     });
   },
 
   adapter() {
-    let type = this.get('type');
-    let store = this.get('store');
+    let type = this.type;
+    let store = this.store;
     return store.adapterFor(`identity/${type}`);
   },
 
   data() {
-    let { param, paramValue, aliasMountAccessor } = this.getProperties(
-      'param',
-      'paramValue',
-      'aliasMountAccessor'
-    );
+    let { param, paramValue, aliasMountAccessor } = this;
     let data = {};
 
     data[underscore([param])] = paramValue;
@@ -49,10 +44,10 @@ export default Ember.Component.extend({
   },
 
   lookup: task(function*() {
-    let flash = this.get('flashMessages');
-    let type = this.get('type');
-    let store = this.get('store');
-    let { param, paramValue } = this.getProperties('param', 'paramValue');
+    let flash = this.flashMessages;
+    let type = this.type;
+    let store = this.store;
+    let { param, paramValue } = this;
     let response;
     try {
       response = yield this.adapter().lookup(store, this.data());
@@ -63,11 +58,7 @@ export default Ember.Component.extend({
       return;
     }
     if (response) {
-      return this.get('routing.router').transitionTo(
-        'vault.cluster.access.identity.show',
-        response.id,
-        'details'
-      );
+      return this.router.transitionTo('vault.cluster.access.identity.show', response.id, 'details');
     } else {
       flash.danger(`We were unable to find an identity ${type} with a "${param}" of "${paramValue}".`);
     }

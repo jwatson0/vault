@@ -1,4 +1,4 @@
-import attr from 'ember-data/attr';
+import { attr } from '@ember-data/model';
 import Fragment from 'ember-data-model-fragments/fragment';
 
 export default Fragment.extend({
@@ -30,5 +30,12 @@ export default Fragment.extend({
     label: 'Allowed passthrough request headers',
     helpText: 'Headers to whitelist and pass from the request to the backend',
     editType: 'stringArray',
+  }),
+  tokenType: attr('string', {
+    label: 'Token Type',
+    helpText:
+      "The type of token that should be generated via this role. Can be `service`, `batch`, or `default` to use the mount's default (which unless changed will be `service` tokens).",
+    possibleValues: ['default', 'batch', 'service'],
+    defaultFormValue: 'default',
   }),
 });

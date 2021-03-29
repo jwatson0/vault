@@ -13,14 +13,13 @@ rules to get in the way of that.
 That said, if you want to ensure that a pull request is likely to be merged,
 talk to us! You can find out our thoughts and ensure that your contribution
 won't clash or be obviated by Vault's normal direction. A great way to do this
-is via the [Vault Google Group][2]. Sometimes Vault devs are in `#vault-tool`
-on Freenode, too.
-
-This document will cover what we're looking for in terms of reporting issues.
-By addressing all the points we're looking for, it raises the chances we can
-quickly merge or address your contributions.
+is via the [Vault Discussion Forum][2].
 
 ## Issues
+
+This section will cover what we're looking for in terms of reporting issues.
+By addressing all the points we're looking for, it raises the chances we can
+quickly merge or address your contributions.
 
 ### Reporting an Issue
 
@@ -62,6 +61,30 @@ quickly merge or address your contributions.
    the issue tracker clean. The issue is still indexed and available for
    future viewers, or can be re-opened if necessary.
 
+## Pull requests
+
+Please include a file within your PR named `changelog/#.txt`, where `#` is your
+pull request ID.  There are many examples under [changelog](changelog/), but
+the general format is
+
+````
+```release-note:CATEGORY
+COMPONENT: summary of change
+```
+````
+
+CATEGORY is one of `security`, `change`, `feature`, `improvement`, or `bug`.
+Your PR is almost certain to be one of `bug` or `improvement`, but don't
+worry too much about getting it exactly right, we'll tell you if a change is 
+needed.
+
+To determine the relevant component, consult [CHANGELOG](CHANGELOG.md) and pick
+whichever one you see that seems the closest match.
+
+You do not need to include the link at the end of the summary that appears in
+CHANGELOG.md, those are generated automatically by the changelog-building 
+process.
+
 ## Setting up Go to work on Vault
 
 If you have never worked with Go before, you will have to complete the
@@ -69,4 +92,10 @@ following steps listed in the README, under the section [Developing Vault][1].
 
 
 [1]: https://github.com/hashicorp/vault#developing-vault
-[2]: https://groups.google.com/group/vault-tool
+[2]: https://discuss.hashicorp.com/c/vault
+
+## Contributor License Agreement
+
+We require that all contributors sign our Contributor License Agreement ("CLA") before we can accept the contribution. 
+
+[Learn more about why HashiCorp requires a CLA and what the CLA includes](https://www.hashicorp.com/cla)

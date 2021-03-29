@@ -6,22 +6,22 @@ import (
 	"testing"
 
 	log "github.com/hashicorp/go-hclog"
-
-	"github.com/hashicorp/vault/helper/logging"
-	"github.com/hashicorp/vault/logical"
-	"github.com/hashicorp/vault/physical/inmem"
+	wrapping "github.com/hashicorp/go-kms-wrapping"
+	"github.com/hashicorp/vault/sdk/helper/logging"
+	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/hashicorp/vault/sdk/physical/inmem"
 )
 
 func TestCore_Init(t *testing.T) {
 	c, conf := testCore_NewTestCore(t, nil)
 	testCore_Init_Common(t, c, conf, &SealConfig{SecretShares: 5, SecretThreshold: 3}, nil)
-
-	c, conf = testCore_NewTestCore(t, NewTestSeal(t, nil))
-	bc, _ := TestSealDefConfigs()
-	testCore_Init_Common(t, c, conf, bc, nil)
 }
 
 func testCore_NewTestCore(t *testing.T, seal Seal) (*Core, *CoreConfig) {
+	return testCore_NewTestCoreLicensing(t, seal, nil)
+}
+
+func testCore_NewTestCoreLicensing(t *testing.T, seal Seal, licensingConfig *LicensingConfig) (*Core, *CoreConfig) {
 	logger := logging.NewVaultLogger(log.Trace)
 
 	inm, err := inmem.NewInmem(nil, logger)
@@ -34,12 +34,22 @@ func testCore_NewTestCore(t *testing.T, seal Seal) (*Core, *CoreConfig) {
 		LogicalBackends: map[string]logical.Factory{
 			"kv": LeasedPassthroughBackendFactory,
 		},
-		Seal: seal,
+		Seal:            seal,
+		LicensingConfig: licensingConfig,
 	}
 	c, err := NewCore(conf)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
+
+	t.Cleanup(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Log("panic closing core during cleanup", "panic", r)
+			}
+		}()
+		c.Shutdown()
+	})
 	return c, conf
 }
 
@@ -79,7 +89,7 @@ func testCore_Init_Common(t *testing.T, c *Core, conf *CoreConfig, barrierConf, 
 		t.Fatalf("err: %v", err)
 	}
 
-	if len(res.SecretShares) != (barrierConf.SecretShares - barrierConf.StoredShares) {
+	if c.seal.BarrierType() == wrapping.Shamir && len(res.SecretShares) != barrierConf.SecretShares {
 		t.Fatalf("Bad: got\n%#v\nexpected conf matching\n%#v\n", *res, *barrierConf)
 	}
 	if recoveryConf != nil {

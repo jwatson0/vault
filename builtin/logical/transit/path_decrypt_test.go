@@ -2,63 +2,20 @@ package transit
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/hashicorp/vault/sdk/logical"
 	"testing"
-
-	"github.com/hashicorp/vault/logical"
 )
 
-// Case1: If batch decryption input is not base64 encoded, it should fail.
-func TestTransit_BatchDecryptionCase1(t *testing.T) {
+func TestTransit_BatchDecryption(t *testing.T) {
 	var resp *logical.Response
 	var err error
 
 	b, s := createBackendWithStorage(t)
 
 	batchEncryptionInput := []interface{}{
-		map[string]interface{}{"plaintext": "dGhlIHF1aWNrIGJyb3duIGZveA=="},
-		map[string]interface{}{"plaintext": "Cg=="},
-	}
-
-	batchEncryptionData := map[string]interface{}{
-		"batch_input": batchEncryptionInput,
-	}
-
-	batchEncryptionReq := &logical.Request{
-		Operation: logical.CreateOperation,
-		Path:      "encrypt/upserted_key",
-		Storage:   s,
-		Data:      batchEncryptionData,
-	}
-	resp, err = b.HandleRequest(context.Background(), batchEncryptionReq)
-	if err != nil || (resp != nil && resp.IsError()) {
-		t.Fatalf("err:%v resp:%#v", err, resp)
-	}
-
-	batchDecryptionData := map[string]interface{}{
-		"batch_input": resp.Data["batch_results"],
-	}
-
-	batchDecryptionReq := &logical.Request{
-		Operation: logical.UpdateOperation,
-		Path:      "decrypt/upserted_key",
-		Storage:   s,
-		Data:      batchDecryptionData,
-	}
-	resp, err = b.HandleRequest(context.Background(), batchDecryptionReq)
-	if err == nil {
-		t.Fatalf("expected an error")
-	}
-}
-
-// Case2: Normal case of batch decryption
-func TestTransit_BatchDecryptionCase2(t *testing.T) {
-	var resp *logical.Response
-	var err error
-
-	b, s := createBackendWithStorage(t)
-
-	batchEncryptionInput := []interface{}{
-		map[string]interface{}{"plaintext": "Cg=="},
+		map[string]interface{}{"plaintext": ""},     // empty string
+		map[string]interface{}{"plaintext": "Cg=="}, // newline
 		map[string]interface{}{"plaintext": "dGhlIHF1aWNrIGJyb3duIGZveA=="},
 	}
 	batchEncryptionData := map[string]interface{}{
@@ -76,7 +33,7 @@ func TestTransit_BatchDecryptionCase2(t *testing.T) {
 		t.Fatalf("err:%v resp:%#v", err, resp)
 	}
 
-	batchResponseItems := resp.Data["batch_results"].([]BatchResponseItem)
+	batchResponseItems := resp.Data["batch_results"].([]EncryptBatchResponseItem)
 	batchDecryptionInput := make([]interface{}, len(batchResponseItems))
 	for i, item := range batchResponseItems {
 		batchDecryptionInput[i] = map[string]interface{}{"ciphertext": item.Ciphertext}
@@ -96,19 +53,16 @@ func TestTransit_BatchDecryptionCase2(t *testing.T) {
 		t.Fatalf("err:%v resp:%#v", err, resp)
 	}
 
-	batchDecryptionResponseItems := resp.Data["batch_results"].([]BatchResponseItem)
+	batchDecryptionResponseItems := resp.Data["batch_results"].([]DecryptBatchResponseItem)
+	expectedResult := "[{\"plaintext\":\"\"},{\"plaintext\":\"Cg==\"},{\"plaintext\":\"dGhlIHF1aWNrIGJyb3duIGZveA==\"}]"
 
-	plaintext1 := "dGhlIHF1aWNrIGJyb3duIGZveA=="
-	plaintext2 := "Cg=="
-	for _, item := range batchDecryptionResponseItems {
-		if item.Plaintext != plaintext1 && item.Plaintext != plaintext2 {
-			t.Fatalf("bad: plaintext: %q", item.Plaintext)
-		}
+	jsonResponse, err := json.Marshal(batchDecryptionResponseItems)
+	if err != nil || err == nil && string(jsonResponse) != expectedResult {
+		t.Fatalf("bad: expected json response [%s]", jsonResponse)
 	}
 }
 
-// Case3: Test batch decryption with a derived key
-func TestTransit_BatchDecryptionCase3(t *testing.T) {
+func TestTransit_BatchDecryption_DerivedKey(t *testing.T) {
 	var resp *logical.Response
 	var err error
 
@@ -149,7 +103,7 @@ func TestTransit_BatchDecryptionCase3(t *testing.T) {
 		t.Fatalf("err:%v resp:%#v", err, resp)
 	}
 
-	batchDecryptionInputItems := resp.Data["batch_results"].([]BatchResponseItem)
+	batchDecryptionInputItems := resp.Data["batch_results"].([]EncryptBatchResponseItem)
 
 	batchDecryptionInput := make([]interface{}, len(batchDecryptionInputItems))
 	for i, item := range batchDecryptionInputItems {
@@ -171,7 +125,7 @@ func TestTransit_BatchDecryptionCase3(t *testing.T) {
 		t.Fatalf("err:%v resp:%#v", err, resp)
 	}
 
-	batchDecryptionResponseItems := resp.Data["batch_results"].([]BatchResponseItem)
+	batchDecryptionResponseItems := resp.Data["batch_results"].([]DecryptBatchResponseItem)
 
 	plaintext := "dGhlIHF1aWNrIGJyb3duIGZveA=="
 	for _, item := range batchDecryptionResponseItems {

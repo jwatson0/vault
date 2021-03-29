@@ -1,155 +1,177 @@
-import { test } from 'qunit';
+import { settled, currentURL, currentRouteName, visit } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+import { setupApplicationTest } from 'ember-qunit';
 import { create } from 'ember-cli-page-object';
 
 import { storageKey } from 'vault/services/control-group';
-import moduleForAcceptance from 'vault/tests/helpers/module-for-acceptance';
-import console from 'vault/tests/pages/components/console/ui-panel';
+import consoleClass from 'vault/tests/pages/components/console/ui-panel';
 import authForm from 'vault/tests/pages/components/auth-form';
 import controlGroup from 'vault/tests/pages/components/control-group';
 import controlGroupSuccess from 'vault/tests/pages/components/control-group-success';
+import authPage from 'vault/tests/pages/auth';
+import editPage from 'vault/tests/pages/secrets/backend/kv/edit-secret';
+import listPage from 'vault/tests/pages/secrets/backend/list';
 
-const consoleComponent = create(console);
+const consoleComponent = create(consoleClass);
 const authFormComponent = create(authForm);
 const controlGroupComponent = create(controlGroup);
 const controlGroupSuccessComponent = create(controlGroupSuccess);
-moduleForAcceptance('Acceptance | Enterprise | control groups', {
-  beforeEach() {
-    return authLogin();
-  },
-  afterEach() {
-    return authLogout();
-  },
-});
-const POLICY = `'
-  path "kv/foo" {
-    capabilities = ["create", "read", "update", "delete", "list"]
-    control_group = {
-      max_ttl = "24h"
-      factor "ops_manager" {
-          identity {
-              group_names = ["managers"]
-              approvals = 1
-          }
-       }
+
+module('Acceptance | Enterprise | control groups', function(hooks) {
+  setupApplicationTest(hooks);
+
+  hooks.beforeEach(function() {
+    return authPage.login();
+  });
+
+  const POLICY = `
+    path "kv/foo" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+      control_group = {
+        max_ttl = "24h"
+        factor "ops_manager" {
+            identity {
+                group_names = ["managers"]
+                approvals = 1
+            }
+         }
+      }
     }
-  }
-'`;
 
-const AUTHORIZER_POLICY = `'
-  path "sys/control-group/authorize" {
-    capabilities = ["update"]
-  }
+    path "kv-v2-mount/data/foo" {
+      capabilities = ["create", "read", "update", "list"]
+      control_group = {
+        max_ttl = "24h"
+        factor "ops_manager" {
+            identity {
+                group_names = ["managers"]
+                approvals = 1
+            }
+         }
+      }
+    }
 
-  path "sys/control-group/request" {
-    capabilities = ["update"]
-  }
-'`;
+    path "kv-v2-mount/*" {
+      capabilities = ["list"]
+    }
+  `;
 
-const ADMIN_USER = 'authorizer';
-const ADMIN_PASSWORD = 'test';
-const setupControlGroup = context => {
-  let userpassAccessor;
-  visit('/vault/secrets');
-  consoleComponent.toggle();
-  andThen(() => {
-    consoleComponent.runCommands([
-      //enable kv mount and write some data
+  const AUTHORIZER_POLICY = `
+    path "sys/control-group/authorize" {
+      capabilities = ["update"]
+    }
+
+    path "sys/control-group/request" {
+      capabilities = ["update"]
+    }
+  `;
+
+  const ADMIN_USER = 'authorizer';
+  const ADMIN_PASSWORD = 'test';
+  const setupControlGroup = async context => {
+    let userpassAccessor;
+    await visit('/vault/secrets');
+    await consoleComponent.toggle();
+    await consoleComponent.runCommands([
+      //enable kv-v1 mount and write a secret
       'write sys/mounts/kv type=kv',
       'write kv/foo bar=baz',
+
       //enable userpass, create user and associated entity
       'write sys/auth/userpass type=userpass',
       `write auth/userpass/users/${ADMIN_USER} password=${ADMIN_PASSWORD} policies=default`,
       `write identity/entity name=${ADMIN_USER} policies=test`,
       // write policies for control group + authorization
-      `write sys/policies/acl/kv-control-group policy=${POLICY}`,
-      `write sys/policies/acl/authorizer policy=${AUTHORIZER_POLICY}`,
+      `write sys/policies/acl/kv-control-group policy=${btoa(POLICY)}`,
+      `write sys/policies/acl/authorizer policy=${btoa(AUTHORIZER_POLICY)}`,
       // read out mount to get the accessor
       'read -field=accessor sys/internal/ui/mounts/auth/userpass',
     ]);
-  });
-  andThen(() => {
+    await settled();
     userpassAccessor = consoleComponent.lastTextOutput;
-    consoleComponent.runCommands([
+
+    await consoleComponent.runCommands([
       // lookup entity id for our authorizer
       `write -field=id identity/lookup/entity name=${ADMIN_USER}`,
     ]);
-  });
-
-  andThen(() => {
+    await settled();
     let authorizerEntityId = consoleComponent.lastTextOutput;
-    consoleComponent.runCommands([
+    await consoleComponent.runCommands([
       // create alias for authorizor and add them to the managers group
       `write identity/alias mount_accessor=${userpassAccessor} entity_id=${authorizerEntityId} name=${ADMIN_USER}`,
       `write identity/group name=managers member_entity_ids=${authorizerEntityId} policies=authorizer`,
       // create a token to request access to kv/foo
       'write -field=client_token auth/token/create policies=kv-control-group',
     ]);
-  });
-
-  andThen(() => {
+    await settled();
     context.userToken = consoleComponent.lastLogOutput;
-  });
-  authLogout();
-  andThen(() => {
-    authLogin(context.userToken);
-  });
-};
 
-test('it redirects you if you try to navigate to a Control Group restricted path', function(assert) {
-  setupControlGroup(this);
-  visit('/vault/secrets/kv/show/foo');
-  andThen(() => {
+    await authPage.login(context.userToken);
+    await settled();
+    return this;
+  };
+
+  const writeSecret = async function(backend, path, key, val) {
+    await listPage.visitRoot({ backend });
+    await listPage.create();
+    await editPage.createSecret(path, key, val);
+  };
+
+  test('for v2 secrets it redirects you if you try to navigate to a Control Group restricted path', async function(assert) {
+    await consoleComponent.runCommands([
+      'write sys/mounts/kv-v2-mount type=kv-v2',
+      'delete kv-v2-mount/metadata/foo',
+    ]);
+    await writeSecret('kv-v2-mount', 'foo', 'bar', 'baz');
+    await settled();
+    await setupControlGroup(this);
+    await settled();
+    await visit('/vault/secrets/kv-v2-mount/show/foo');
+    await settled();
     assert.equal(
-      currentPath(),
+      currentRouteName(),
       'vault.cluster.access.control-group-accessor',
       'redirects to access control group route'
     );
   });
-});
 
-const workflow = (assert, context, shouldStoreToken) => {
-  let controlGroupToken;
-  let accessor;
-  let url = '/vault/secrets/kv/show/foo';
-  setupControlGroup(context);
-
-  // as the requestor, go to the URL that's blocked by the control group
-  // and store the values
-  visit(url);
-  andThen(() => {
+  const workflow = async (assert, context, shouldStoreToken) => {
+    let controlGroupToken;
+    let accessor;
+    let url = '/vault/secrets/kv/show/foo';
+    await setupControlGroup(context);
+    await settled();
+    // as the requestor, go to the URL that's blocked by the control group
+    // and store the values
+    await visit(url);
+    await settled();
     accessor = controlGroupComponent.accessor;
     controlGroupToken = controlGroupComponent.token;
-  });
-  authLogout();
-
-  // log in as the admin, navigate to the accessor page,
-  // and authorize the control group request
-  visit('/vault/auth?with=userpass');
-  andThen(() => {
-    authFormComponent.username(ADMIN_USER);
-    authFormComponent.password(ADMIN_PASSWORD);
-    authFormComponent.login();
-  });
-  andThen(() => {
-    visit(`/vault/access/control-groups/${accessor}`);
-  });
-  andThen(() => {
-    controlGroupComponent.authorize();
-  });
-  andThen(() => {
+    await authPage.logout();
+    await settled();
+    // log in as the admin, navigate to the accessor page,
+    // and authorize the control group request
+    await visit('/vault/auth?with=userpass');
+    await settled();
+    await authFormComponent.username(ADMIN_USER);
+    await settled();
+    await authFormComponent.password(ADMIN_PASSWORD);
+    await settled();
+    await authFormComponent.login();
+    await settled();
+    await visit(`/vault/access/control-groups/${accessor}`);
+    await settled();
+    // putting here to help with flaky test
+    assert.dom('[data-test-authorize-button]').exists();
+    await controlGroupComponent.authorize();
+    await settled();
     assert.equal(controlGroupComponent.bannerPrefix, 'Thanks!', 'text display changes');
-  });
-  authLogout();
-
-  // log _back_ in as the requestor
-  andThen(() => {
-    authLogin(context.userToken);
-  });
-
-  if (shouldStoreToken) {
-    // stuff localStorage full of the necessary details
-    // so that they can nav back to the control group'd path in the UI
-    andThen(() => {
+    await settled();
+    await authPage.logout();
+    await settled();
+    await authPage.login(context.userToken);
+    await settled();
+    if (shouldStoreToken) {
       localStorage.setItem(
         storageKey(accessor, 'kv/foo'),
         JSON.stringify({
@@ -161,50 +183,40 @@ const workflow = (assert, context, shouldStoreToken) => {
           },
         })
       );
-    });
-    andThen(() => {
-      visit(`/vault/access/control-groups/${accessor}`);
-    });
-    andThen(() => {
+      await visit(`/vault/access/control-groups/${accessor}`);
+      await settled();
       assert.ok(controlGroupSuccessComponent.showsNavigateMessage, 'shows user the navigate message');
-    });
-    controlGroupSuccessComponent.navigate();
-    andThen(() => {
+      await controlGroupSuccessComponent.navigate();
+      await settled();
       assert.equal(currentURL(), url, 'successfully loads the target url');
-    });
-  } else {
-    andThen(() => {
-      visit(`/vault/access/control-groups/${accessor}`);
-    });
-    andThen(() => {
-      controlGroupSuccessComponent.token(controlGroupToken);
-      controlGroupSuccessComponent.unwrap();
-    });
-    andThen(() => {
+    } else {
+      await visit(`/vault/access/control-groups/${accessor}`);
+      await settled();
+      await controlGroupSuccessComponent.token(controlGroupToken);
+      await settled();
+      await controlGroupSuccessComponent.unwrap();
+      await settled();
       assert.ok(controlGroupSuccessComponent.showsJsonViewer, 'shows the json viewer');
-    });
-  }
-};
+    }
+  };
 
-test('it allows the full flow to work with a saved token', function(assert) {
-  workflow(assert, this, true);
-});
-
-test('it allows the full flow to work without a saved token', function(assert) {
-  workflow(assert, this);
-});
-
-test('it displays the warning in the console when making a request to a Control Group path', function(
-  assert
-) {
-  setupControlGroup(this);
-  andThen(() => {
-    consoleComponent.toggle();
+  test('it allows the full flow to work with a saved token', async function(assert) {
+    await workflow(assert, this, true);
+    await settled();
   });
-  andThen(() => {
-    consoleComponent.runCommands('read kv/foo');
+
+  test('it allows the full flow to work without a saved token', async function(assert) {
+    await workflow(assert, this);
+    await settled();
   });
-  andThen(() => {
+
+  test('it displays the warning in the console when making a request to a Control Group path', async function(assert) {
+    await setupControlGroup(this);
+    await settled();
+    await consoleComponent.toggle();
+    await settled();
+    await consoleComponent.runCommands('read kv/foo');
+    await settled();
     let output = consoleComponent.lastLogOutput;
     assert.ok(output.includes('A Control Group was encountered at kv/foo'));
     assert.ok(output.includes('The Control Group Token is'));

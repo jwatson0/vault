@@ -1,6 +1,12 @@
-import Ember from 'ember';
+import { helper as buildHelper } from '@ember/component/helper';
 
 const MOUNTABLE_AUTH_METHODS = [
+  {
+    displayName: 'AliCloud',
+    value: 'alicloud',
+    type: 'alicloud',
+    category: 'cloud',
+  },
   {
     displayName: 'AppRole',
     value: 'approle',
@@ -32,9 +38,16 @@ const MOUNTABLE_AUTH_METHODS = [
     category: 'cloud',
   },
   {
-    displayName: 'JWT/OIDC',
+    displayName: 'JWT',
     value: 'jwt',
     type: 'jwt',
+    glyph: 'auth',
+    category: 'generic',
+  },
+  {
+    displayName: 'OIDC',
+    value: 'oidc',
+    type: 'oidc',
     glyph: 'auth',
     category: 'generic',
   },
@@ -79,7 +92,7 @@ const MOUNTABLE_AUTH_METHODS = [
 ];
 
 export function methods() {
-  return MOUNTABLE_AUTH_METHODS;
+  return MOUNTABLE_AUTH_METHODS.slice();
 }
 
-export default Ember.Helper.helper(methods);
+export default buildHelper(methods);

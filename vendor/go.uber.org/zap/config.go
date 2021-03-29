@@ -21,6 +21,7 @@
 package zap
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -74,10 +75,10 @@ type Config struct {
 	// EncoderConfig sets options for the chosen encoder. See
 	// zapcore.EncoderConfig for details.
 	EncoderConfig zapcore.EncoderConfig `json:"encoderConfig" yaml:"encoderConfig"`
-	// OutputPaths is a list of paths to write logging output to. See Open for
-	// details.
+	// OutputPaths is a list of URLs or file paths to write logging output to.
+	// See Open for details.
 	OutputPaths []string `json:"outputPaths" yaml:"outputPaths"`
-	// ErrorOutputPaths is a list of paths to write internal logger errors to.
+	// ErrorOutputPaths is a list of URLs to write internal logger errors to.
 	// The default is standard error.
 	//
 	// Note that this setting only affects internal errors; for sample code that
@@ -172,6 +173,10 @@ func (cfg Config) Build(opts ...Option) (*Logger, error) {
 	sink, errSink, err := cfg.openSinks()
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.Level == (AtomicLevel{}) {
+		return nil, fmt.Errorf("missing Level")
 	}
 
 	log := New(

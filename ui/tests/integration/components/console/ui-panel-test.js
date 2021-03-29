@@ -1,48 +1,40 @@
-import { moduleForComponent, test, skip } from 'ember-qunit';
+import { module, test } from 'qunit';
+import { setupRenderingTest } from 'ember-qunit';
+import { render, settled } from '@ember/test-helpers';
 import { create } from 'ember-cli-page-object';
-import wait from 'ember-test-helpers/wait';
 import uiPanel from 'vault/tests/pages/components/console/ui-panel';
 import hbs from 'htmlbars-inline-precompile';
 
 const component = create(uiPanel);
 
-moduleForComponent('console/ui-panel', 'Integration | Component | console/ui panel', {
-  integration: true,
+module('Integration | Component | console/ui panel', function(hooks) {
+  setupRenderingTest(hooks);
 
-  beforeEach() {
-    component.setContext(this);
-  },
+  test('it renders', async function(assert) {
+    await render(hbs`{{console/ui-panel}}`);
+    await settled();
+    assert.ok(component.hasInput);
+  });
 
-  afterEach() {
-    component.removeContext();
-  },
-});
-
-test('it renders', function(assert) {
-  this.render(hbs`{{console/ui-panel}}`);
-  assert.ok(component.hasInput);
-});
-
-test('it clears console input on enter', function(assert) {
-  this.render(hbs`{{console/ui-panel}}`);
-  component.consoleInput('list this/thing/here').enter();
-  return wait().then(() => {
+  test('it clears console input on enter', async function(assert) {
+    await render(hbs`{{console/ui-panel}}`);
+    await settled();
+    await component.runCommands('list this/thing/here');
+    await settled();
     assert.equal(component.consoleInputValue, '', 'empties input field on enter');
   });
-});
 
-test('it clears the log when using clear command', function(assert) {
-  this.render(hbs`{{console/ui-panel}}`);
-  component.consoleInput('list this/thing/here').enter();
-  component.consoleInput('list this/other/thing').enter();
-  component.consoleInput('read another/thing').enter();
-  wait().then(() => {
+  test('it clears the log when using clear command', async function(assert) {
+    await render(hbs`{{console/ui-panel}}`);
+    await settled();
+    await component.runCommands(['list this/thing/here', 'list this/other/thing', 'read another/thing']);
+    await settled();
     assert.notEqual(component.logOutput, '', 'there is output in the log');
-    component.consoleInput('clear').enter();
-  });
 
-  wait().then(() => component.up());
-  return wait().then(() => {
+    await component.runCommands('clear');
+    await settled();
+    await component.up();
+    await settled();
     assert.equal(component.logOutput, '', 'clears the output log');
     assert.equal(
       component.consoleInputValue,
@@ -50,65 +42,59 @@ test('it clears the log when using clear command', function(assert) {
       'populates console input with previous command on up after enter'
     );
   });
-});
 
-test('it adds command to history on enter', function(assert) {
-  this.render(hbs`{{console/ui-panel}}`);
-  component.consoleInput('list this/thing/here').enter();
-  wait().then(() => component.up());
-  wait().then(() => {
+  test('it adds command to history on enter', async function(assert) {
+    await render(hbs`{{console/ui-panel}}`);
+    await settled();
+    await component.runCommands('list this/thing/here');
+    await settled();
+    await component.up();
+    await settled();
     assert.equal(
       component.consoleInputValue,
       'list this/thing/here',
       'populates console input with previous command on up after enter'
     );
-  });
-  wait().then(() => component.down());
-  return wait().then(() => {
+    await component.down();
+    await settled();
     assert.equal(component.consoleInputValue, '', 'populates console input with next command on down');
   });
-});
 
-skip('it cycles through history with more than one command', function(assert) {
-  this.render(hbs`{{console/ui-panel}}`);
-  component.consoleInput('list this/thing/here').enter();
-  wait().then(() => component.consoleInput('read that/thing/there').enter());
-  wait().then(() => component.consoleInput('qwerty').enter());
-
-  wait().then(() => component.up());
-  wait().then(() => {
+  test('it cycles through history with more than one command', async function(assert) {
+    await render(hbs`{{console/ui-panel}}`);
+    await settled();
+    await component.runCommands(['list this/thing/here', 'read that/thing/there', 'qwerty']);
+    await settled();
+    await component.up();
+    await settled();
     assert.equal(
       component.consoleInputValue,
       'qwerty',
       'populates console input with previous command on up after enter'
     );
-  });
-  wait().then(() => component.up());
-  wait().then(() => {
+    await component.up();
+    await settled();
     assert.equal(
       component.consoleInputValue,
       'read that/thing/there',
       'populates console input with previous command on up'
     );
-  });
-  wait().then(() => component.up());
-  wait().then(() => {
+    await component.up();
+    await settled();
     assert.equal(
       component.consoleInputValue,
       'list this/thing/here',
       'populates console input with previous command on up'
     );
-  });
-  wait().then(() => component.up());
-  wait().then(() => {
+    await component.up();
+    await settled();
     assert.equal(
       component.consoleInputValue,
       'qwerty',
       'populates console input with initial command if cycled through all previous commands'
     );
-  });
-  wait().then(() => component.down());
-  return wait().then(() => {
+    await component.down();
+    await settled();
     assert.equal(
       component.consoleInputValue,
       '',

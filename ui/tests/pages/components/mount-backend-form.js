@@ -1,6 +1,6 @@
-import { clickable, collection, fillable, text, value } from 'ember-cli-page-object';
+import { clickable, collection, fillable, text, value, attribute } from 'ember-cli-page-object';
 import fields from './form-field';
-import errorText from './message-in-page';
+import errorText from './alert-banner';
 
 export default {
   ...fields,
@@ -14,19 +14,20 @@ export default {
   pathValue: value('[data-test-input="path"]'),
   types: collection('[data-test-mount-type-radio] input', {
     select: clickable(),
-    mountType: value(),
+    id: attribute('id'),
   }),
   type: fillable('[name="mount-type"]'),
-  selectType(type) {
-    let types = this.types;
-    let thing = types.filterBy('mountType', type)[0];
-    thing.select();
-    return this;
+  async selectType(type) {
+    return this.types.filterBy('id', type)[0].select();
   },
-  mount(type, path) {
+  async mount(type, path) {
+    await this.selectType(type);
     if (path) {
-      return this.selectType(type).next().path(path).submit();
+      await this.next()
+        .path(path)
+        .submit();
+    } else {
+      await this.next().submit();
     }
-    return this.selectType(type).next().submit();
   },
 };

@@ -2,6 +2,7 @@ package transit
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"math/rand"
@@ -15,22 +16,22 @@ import (
 	"time"
 
 	uuid "github.com/hashicorp/go-uuid"
-	"github.com/hashicorp/vault/helper/keysutil"
-	"github.com/hashicorp/vault/logical"
-	"github.com/hashicorp/vault/logical/framework"
-	logicaltest "github.com/hashicorp/vault/logical/testing"
+	logicaltest "github.com/hashicorp/vault/helper/testhelpers/logical"
+	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/helper/keysutil"
+	"github.com/hashicorp/vault/sdk/logical"
 	"github.com/mitchellh/mapstructure"
 )
 
 const (
-	testPlaintext = "the quick brown fox"
+	testPlaintext = "The quick brown fox"
 )
 
-func createBackendWithStorage(t *testing.T) (*backend, logical.Storage) {
+func createBackendWithStorage(t testing.TB) (*backend, logical.Storage) {
 	config := logical.TestBackendConfig()
 	config.StorageView = &logical.InmemStorage{}
 
-	b := Backend(config)
+	b, _ := Backend(context.Background(), config)
 	if b == nil {
 		t.Fatalf("failed to create backend")
 	}
@@ -41,7 +42,7 @@ func createBackendWithStorage(t *testing.T) (*backend, logical.Storage) {
 	return b, config.StorageView
 }
 
-func createBackendWithSysView(t *testing.T) (*backend, logical.Storage) {
+func createBackendWithSysView(t testing.TB) (*backend, logical.Storage) {
 	sysView := logical.TestSystemView()
 	storage := &logical.InmemStorage{}
 
@@ -50,7 +51,7 @@ func createBackendWithSysView(t *testing.T) (*backend, logical.Storage) {
 		System:      sysView,
 	}
 
-	b := Backend(conf)
+	b, _ := Backend(context.Background(), conf)
 	if b == nil {
 		t.Fatal("failed to create backend")
 	}
@@ -63,8 +64,52 @@ func createBackendWithSysView(t *testing.T) (*backend, logical.Storage) {
 	return b, storage
 }
 
+func createBackendWithSysViewWithStorage(t testing.TB, s logical.Storage) *backend {
+	sysView := logical.TestSystemView()
+
+	conf := &logical.BackendConfig{
+		StorageView: s,
+		System:      sysView,
+	}
+
+	b, _ := Backend(context.Background(), conf)
+	if b == nil {
+		t.Fatal("failed to create backend")
+	}
+
+	err := b.Backend.Setup(context.Background(), conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return b
+}
+
+func createBackendWithForceNoCacheWithSysViewWithStorage(t testing.TB, s logical.Storage) *backend {
+	sysView := logical.TestSystemView()
+	sysView.CachingDisabledVal = true
+
+	conf := &logical.BackendConfig{
+		StorageView: s,
+		System:      sysView,
+	}
+
+	b, _ := Backend(context.Background(), conf)
+	if b == nil {
+		t.Fatal("failed to create backend")
+	}
+
+	err := b.Backend.Setup(context.Background(), conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return b
+}
+
 func TestTransit_RSA(t *testing.T) {
 	testTransit_RSA(t, "rsa-2048")
+	testTransit_RSA(t, "rsa-3072")
 	testTransit_RSA(t, "rsa-4096")
 }
 
@@ -205,11 +250,8 @@ func testTransit_RSA(t *testing.T, keyType string) {
 		"hash_algorithm": "invalid",
 	}
 	resp, err = b.HandleRequest(context.Background(), signReq)
-	if err != nil {
+	if err == nil {
 		t.Fatal(err)
-	}
-	if resp == nil || !resp.IsError() {
-		t.Fatal("expected an error response")
 	}
 
 	signReq.Data = map[string]interface{}{
@@ -251,7 +293,7 @@ func testTransit_RSA(t *testing.T, keyType string) {
 func TestBackend_basic(t *testing.T) {
 	decryptData := make(map[string]interface{})
 	logicaltest.Test(t, logicaltest.TestCase{
-		Factory: Factory,
+		LogicalFactory: Factory,
 		Steps: []logicaltest.TestStep{
 			testAccStepListPolicy(t, "test", true),
 			testAccStepWritePolicy(t, "test", false),
@@ -278,7 +320,7 @@ func TestBackend_basic(t *testing.T) {
 func TestBackend_upsert(t *testing.T) {
 	decryptData := make(map[string]interface{})
 	logicaltest.Test(t, logicaltest.TestCase{
-		Factory: Factory,
+		LogicalFactory: Factory,
 		Steps: []logicaltest.TestStep{
 			testAccStepReadPolicy(t, "test", true, false),
 			testAccStepListPolicy(t, "test", true),
@@ -293,7 +335,7 @@ func TestBackend_upsert(t *testing.T) {
 func TestBackend_datakey(t *testing.T) {
 	dataKeyInfo := make(map[string]interface{})
 	logicaltest.Test(t, logicaltest.TestCase{
-		Factory: Factory,
+		LogicalFactory: Factory,
 		Steps: []logicaltest.TestStep{
 			testAccStepListPolicy(t, "test", true),
 			testAccStepWritePolicy(t, "test", false),
@@ -317,7 +359,7 @@ func testBackendRotation(t *testing.T) {
 	decryptData := make(map[string]interface{})
 	encryptHistory := make(map[int]map[string]interface{})
 	logicaltest.Test(t, logicaltest.TestCase{
-		Factory: Factory,
+		LogicalFactory: Factory,
 		Steps: []logicaltest.TestStep{
 			testAccStepListPolicy(t, "test", true),
 			testAccStepWritePolicy(t, "test", false),
@@ -380,7 +422,7 @@ func testBackendRotation(t *testing.T) {
 func TestBackend_basic_derived(t *testing.T) {
 	decryptData := make(map[string]interface{})
 	logicaltest.Test(t, logicaltest.TestCase{
-		Factory: Factory,
+		LogicalFactory: Factory,
 		Steps: []logicaltest.TestStep{
 			testAccStepListPolicy(t, "test", true),
 			testAccStepWritePolicy(t, "test", true),
@@ -882,18 +924,18 @@ func testDerivedKeyUpgrade(t *testing.T, keyType keysutil.KeyType) {
 	}
 
 	p.MigrateKeyToKeysMap()
-	p.Upgrade(context.Background(), storage) // Need to run the upgrade code to make the migration stick
+	p.Upgrade(context.Background(), storage, cryptoRand.Reader) // Need to run the upgrade code to make the migration stick
 
 	if p.KDF != keysutil.Kdf_hmac_sha256_counter {
 		t.Fatalf("bad KDF value by default; counter val is %d, KDF val is %d, policy is %#v", keysutil.Kdf_hmac_sha256_counter, p.KDF, *p)
 	}
 
-	derBytesOld, err := p.DeriveKey(keyContext, 1, 0)
+	derBytesOld, err := p.GetKey(keyContext, 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	derBytesOld2, err := p.DeriveKey(keyContext, 1, 0)
+	derBytesOld2, err := p.GetKey(keyContext, 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -907,12 +949,12 @@ func testDerivedKeyUpgrade(t *testing.T, keyType keysutil.KeyType) {
 		t.Fatal("expected no upgrade needed")
 	}
 
-	derBytesNew, err := p.DeriveKey(keyContext, 1, 64)
+	derBytesNew, err := p.GetKey(keyContext, 1, 64)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	derBytesNew2, err := p.DeriveKey(keyContext, 1, 64)
+	derBytesNew2, err := p.GetKey(keyContext, 1, 64)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -928,8 +970,10 @@ func testDerivedKeyUpgrade(t *testing.T, keyType keysutil.KeyType) {
 
 func TestConvergentEncryption(t *testing.T) {
 	testConvergentEncryptionCommon(t, 0, keysutil.KeyType_AES256_GCM96)
+	testConvergentEncryptionCommon(t, 2, keysutil.KeyType_AES128_GCM96)
 	testConvergentEncryptionCommon(t, 2, keysutil.KeyType_AES256_GCM96)
 	testConvergentEncryptionCommon(t, 2, keysutil.KeyType_ChaCha20_Poly1305)
+	testConvergentEncryptionCommon(t, 3, keysutil.KeyType_AES128_GCM96)
 	testConvergentEncryptionCommon(t, 3, keysutil.KeyType_AES256_GCM96)
 	testConvergentEncryptionCommon(t, 3, keysutil.KeyType_ChaCha20_Poly1305)
 }
@@ -1297,16 +1341,17 @@ func testConvergentEncryptionCommon(t *testing.T, ver int, keyType keysutil.KeyT
 func TestPolicyFuzzing(t *testing.T) {
 	var be *backend
 	sysView := logical.TestSystemView()
+	sysView.CachingDisabledVal = true
 	conf := &logical.BackendConfig{
 		System: sysView,
 	}
 
-	be = Backend(conf)
+	be, _ = Backend(context.Background(), conf)
 	be.Setup(context.Background(), conf)
 	testPolicyFuzzingCommon(t, be)
 
 	sysView.CachingDisabledVal = true
-	be = Backend(conf)
+	be, _ = Backend(context.Background(), conf)
 	be.Setup(context.Background(), conf)
 	testPolicyFuzzingCommon(t, be)
 }

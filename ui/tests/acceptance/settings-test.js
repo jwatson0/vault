@@ -1,52 +1,51 @@
-import { test } from 'qunit';
-import moduleForAcceptance from 'vault/tests/helpers/module-for-acceptance';
+import { currentURL, find, visit, settled } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+import { setupApplicationTest } from 'ember-qunit';
 import backendListPage from 'vault/tests/pages/secrets/backends';
 import mountSecrets from 'vault/tests/pages/settings/mount-secret-backend';
+import authPage from 'vault/tests/pages/auth';
+import logout from 'vault/tests/pages/logout';
 
-moduleForAcceptance('Acceptance | settings', {
-  beforeEach() {
-    return authLogin();
-  },
-  afterEach() {
-    return authLogout();
-  },
-});
+module('Acceptance | settings', function(hooks) {
+  setupApplicationTest(hooks);
 
-test('settings', function(assert) {
-  const now = new Date().getTime();
-  const type = 'consul';
-  const path = `path-${now}`;
+  hooks.beforeEach(function() {
+    return authPage.login();
+  });
 
-  // mount unsupported backend
-  visit('/vault/settings/mount-secret-backend');
-  andThen(function() {
+  hooks.afterEach(function() {
+    return logout.visit();
+  });
+
+  test('settings', async function(assert) {
+    const now = new Date().getTime();
+    const type = 'consul';
+    const path = `path-${now}`;
+
+    // mount unsupported backend
+    await visit('/vault/settings/mount-secret-backend');
+    await settled();
     assert.equal(currentURL(), '/vault/settings/mount-secret-backend');
 
-    mountSecrets
-      .selectType(type)
+    await mountSecrets.selectType(type);
+    await mountSecrets
       .next()
       .path(path)
       .toggleOptions()
-      .defaultTTLVal(100)
+      .enableDefaultTtl()
       .defaultTTLUnit('s')
+      .defaultTTLVal(100)
       .submit();
-  });
-
-  andThen(() => {
-    assert.equal(currentURL(), `/vault/secrets`, 'redirects to secrets page');
+    await settled();
     assert.ok(
-      find('[data-test-flash-message]').text().trim(),
+      find('[data-test-flash-message]').textContent.trim(),
       `Successfully mounted '${type}' at '${path}'!`
     );
-    let row = backendListPage.rows().findByPath(path);
-    row.menu();
-  });
-
-  andThen(() => {
-    backendListPage.configLink();
-  });
-
-  andThen(() => {
+    await settled();
+    assert.equal(currentURL(), `/vault/secrets`, 'redirects to secrets page');
+    let row = backendListPage.rows.filterBy('path', path + '/')[0];
+    await row.menu();
+    await backendListPage.configLink();
     assert.ok(currentURL(), '/vault/secrets/${path}/configuration', 'navigates to the config page');
   });
 });

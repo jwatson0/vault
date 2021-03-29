@@ -1,17 +1,18 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import { computed } from '@ember/object';
+import Component from '@ember/component';
 import { task } from 'ember-concurrency';
 import { methods } from 'vault/helpers/mountable-auth-methods';
-import { engines } from 'vault/helpers/mountable-secret-engines';
+import { engines, KMIP, TRANSFORM } from 'vault/helpers/mountable-secret-engines';
 
-const { inject, computed, Component } = Ember;
 const METHODS = methods();
 const ENGINES = engines();
 
 export default Component.extend({
-  store: inject.service(),
-  wizard: inject.service(),
-  flashMessages: inject.service(),
-  routing: inject.service('-routing'),
+  store: service(),
+  wizard: service(),
+  flashMessages: service(),
+  version: service(),
 
   /*
    * @param Function
@@ -20,8 +21,7 @@ export default Component.extend({
    * Optional param to call a function upon successfully mounting a backend
    *
    */
-  onMountSuccess: () => {},
-  onConfigError: () => {},
+  onMountSuccess() {},
   /*
    * @param String
    * @public
@@ -41,60 +41,36 @@ export default Component.extend({
    */
   mountModel: null,
 
-  showConfig: false,
+  showEnable: false,
 
   init() {
     this._super(...arguments);
-    const type = this.get('mountType');
+    const type = this.mountType;
     const modelType = type === 'secret' ? 'secret-engine' : 'auth-method';
-    const model = this.get('store').createRecord(modelType);
+    const model = this.store.createRecord(modelType);
     this.set('mountModel', model);
   },
 
-  mountTypes: computed('mountType', function() {
-    return this.get('mountType') === 'secret' ? ENGINES : METHODS;
+  mountTypes: computed('engines', 'mountType', function() {
+    return this.mountType === 'secret' ? this.engines : METHODS;
+  }),
+
+  engines: computed('version.{features[],isEnterprise}', function() {
+    if (this.version.isEnterprise) {
+      return ENGINES.concat([KMIP, TRANSFORM]);
+    }
+    return ENGINES;
   }),
 
   willDestroy() {
     // if unsaved, we want to unload so it doesn't show up in the auth mount list
-    this.get('mountModel').rollbackAttributes();
-  },
-
-  getConfigModelType(methodType) {
-    let mountType = this.get('mountType');
-    let noConfig = ['approle'];
-    if (mountType === 'secret' || noConfig.includes(methodType)) {
-      return;
-    }
-    if (methodType === 'aws') {
-      return 'auth-config/aws/client';
-    }
-    return `auth-config/${methodType}`;
-  },
-
-  changeConfigModel(methodType) {
-    let mount = this.get('mountModel');
-    if (this.get('mountType') === 'secret') {
-      return;
-    }
-    let configRef = mount.hasMany('authConfigs').value();
-    let currentConfig = configRef.get('firstObject');
-    if (currentConfig) {
-      // rollbackAttributes here will remove the the config model from the store
-      // because `isNew` will be true
-      currentConfig.rollbackAttributes();
-      currentConfig.unloadRecord();
-    }
-    let configType = this.getConfigModelType(methodType);
-    if (!configType) return;
-    let config = this.get('store').createRecord(configType);
-    config.set('backend', mount);
+    this.mountModel.rollbackAttributes();
   },
 
   checkPathChange(type) {
-    let mount = this.get('mountModel');
-    let currentPath = mount.get('path');
-    let list = this.get('mountTypes');
+    let mount = this.mountModel;
+    let currentPath = mount.path;
+    let list = this.mountTypes;
     // if the current path matches a type (meaning the user hasn't altered it),
     // change it here to match the new type
     let isUnchanged = list.findBy('type', currentPath);
@@ -104,74 +80,38 @@ export default Component.extend({
   },
 
   mountBackend: task(function*() {
-    const mountModel = this.get('mountModel');
-    const { type, path } = mountModel.getProperties('type', 'path');
+    const mountModel = this.mountModel;
+    const { type, path } = mountModel;
     try {
       yield mountModel.save();
     } catch (err) {
       // err will display via model state
       return;
     }
-    this.get('flashMessages').success(
-      `Successfully mounted ${type} ${this.get('mountType')} method at ${path}.`
-    );
-    if (this.get('mountType') === 'secret') {
-      yield this.get('onMountSuccess')(type, path);
-      return;
-    }
-    yield this.get('saveConfig').perform(mountModel);
-  }).drop(),
 
-  saveConfig: task(function*(mountModel) {
-    const configRef = mountModel.hasMany('authConfigs').value();
-    const config = configRef.get('firstObject');
-    const { type, path } = mountModel.getProperties('type', 'path');
-    try {
-      if (config && Object.keys(config.changedAttributes()).length) {
-        yield config.save();
-        this.get('wizard').transitionFeatureMachine(
-          this.get('wizard.featureState'),
-          'CONTINUE',
-          this.get('mountModel').get('type')
-        );
-        this.get('flashMessages').success(
-          `The config for ${type} ${this.get('mountType')} method at ${path} was saved successfully.`
-        );
-      }
-      yield this.get('onMountSuccess')(type, path);
-    } catch (err) {
-      this.get('flashMessages').danger(
-        `There was an error saving the configuration for ${type} ${this.get(
-          'mountType'
-        )} method at ${path}. ${err.errors.join(' ')}`
-      );
-      yield this.get('onConfigError')(mountModel.id);
-    }
-  }).drop(),
+    let mountType = this.mountType;
+    mountType = mountType === 'secret' ? `${mountType}s engine` : `${mountType} method`;
+    this.flashMessages.success(`Successfully mounted the ${type} ${mountType} at ${path}.`);
+    yield this.onMountSuccess(type, path);
+    return;
+  })
+    .drop()
+    .withTestWaiter(),
 
   actions: {
     onTypeChange(path, value) {
       if (path === 'type') {
-        this.get('wizard').set('componentState', value);
-        this.changeConfigModel(value);
+        this.wizard.set('componentState', value);
         this.checkPathChange(value);
       }
     },
 
-    toggleShowConfig(value) {
-      this.set('showConfig', value);
-      if (value === true && this.get('wizard.featureState') === 'idle') {
-        this.get('wizard').transitionFeatureMachine(
-          this.get('wizard.featureState'),
-          'CONTINUE',
-          this.get('mountModel').get('type')
-        );
+    toggleShowEnable(value) {
+      this.set('showEnable', value);
+      if (value === true && this.wizard.featureState === 'idle') {
+        this.wizard.transitionFeatureMachine(this.wizard.featureState, 'CONTINUE', this.mountModel.type);
       } else {
-        this.get('wizard').transitionFeatureMachine(
-          this.get('wizard.featureState'),
-          'RESET',
-          this.get('mountModel').get('type')
-        );
+        this.wizard.transitionFeatureMachine(this.wizard.featureState, 'RESET', this.mountModel.type);
       }
     },
   },

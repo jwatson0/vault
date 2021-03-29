@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hashicorp/vault/helper/policyutil"
-	"github.com/hashicorp/vault/logical"
-	"github.com/hashicorp/vault/logical/framework"
+	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/helper/policyutil"
+	"github.com/hashicorp/vault/sdk/logical"
 )
 
 func pathGroupsList(b *backend) *framework.Path {
@@ -19,6 +19,10 @@ func pathGroupsList(b *backend) *framework.Path {
 
 		HelpSynopsis:    pathGroupHelpSyn,
 		HelpDescription: pathGroupHelpDesc,
+		DisplayAttrs: &framework.DisplayAttributes{
+			Navigation: true,
+			ItemType:   "Group",
+		},
 	}
 }
 
@@ -26,12 +30,12 @@ func pathGroups(b *backend) *framework.Path {
 	return &framework.Path{
 		Pattern: `groups/(?P<name>.+)`,
 		Fields: map[string]*framework.FieldSchema{
-			"name": &framework.FieldSchema{
+			"name": {
 				Type:        framework.TypeString,
 				Description: "Name of the LDAP group.",
 			},
 
-			"policies": &framework.FieldSchema{
+			"policies": {
 				Type:        framework.TypeCommaStringSlice,
 				Description: "Comma-separated list of policies associated to the group.",
 			},
@@ -45,6 +49,10 @@ func pathGroups(b *backend) *framework.Path {
 
 		HelpSynopsis:    pathGroupHelpSyn,
 		HelpDescription: pathGroupHelpDesc,
+		DisplayAttrs: &framework.DisplayAttributes{
+			Action:   "Create",
+			ItemType: "Group",
+		},
 	}
 }
 
@@ -132,11 +140,14 @@ func (b *backend) pathGroupWrite(ctx context.Context, req *logical.Request, d *f
 }
 
 func (b *backend) pathGroupList(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	groups, err := req.Storage.List(ctx, "group/")
+	keys, err := logical.CollectKeysWithPrefix(ctx, req.Storage, "group/")
 	if err != nil {
 		return nil, err
 	}
-	return logical.ListResponse(groups), nil
+	for i := range keys {
+		keys[i] = strings.TrimPrefix(keys[i], "group/")
+	}
+	return logical.ListResponse(keys), nil
 }
 
 type GroupEntry struct {
@@ -144,7 +155,7 @@ type GroupEntry struct {
 }
 
 const pathGroupHelpSyn = `
-Manage users allowed to authenticate.
+Manage additional groups for users allowed to authenticate.
 `
 
 const pathGroupHelpDesc = `

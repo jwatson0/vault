@@ -1,8 +1,9 @@
-import DS from 'ember-data';
-import Ember from 'ember';
-const { decamelize } = Ember.String;
+import JSONSerializer from '@ember-data/serializer/json';
+import { isNone, isBlank } from '@ember/utils';
+import { assign } from '@ember/polyfills';
+import { decamelize } from '@ember/string';
 
-export default DS.JSONSerializer.extend({
+export default JSONSerializer.extend({
   keyForAttribute: function(attr) {
     return decamelize(attr);
   },
@@ -13,12 +14,18 @@ export default DS.JSONSerializer.extend({
         if (typeof key !== 'string') {
           return key;
         }
-        let pk = this.get('primaryKey') || 'id';
-        return { [pk]: key };
+        let pk = this.primaryKey || 'id';
+        let model = { [pk]: key };
+        // if we've added _requestQuery in the adapter, we want
+        // attach it to the individual models
+        if (payload._requestQuery) {
+          model = { ...model, ...payload._requestQuery };
+        }
+        return model;
       });
       return models;
     }
-    Ember.assign(payload, payload.data);
+    assign(payload, payload.data);
     delete payload.data;
     return payload;
   },
@@ -36,16 +43,21 @@ export default DS.JSONSerializer.extend({
 
   normalizeResponse(store, primaryModelClass, payload, id, requestType) {
     const responseJSON = this.normalizeItems(payload, requestType);
+    delete payload._requestQuery;
     if (id && !responseJSON.id) {
       responseJSON.id = id;
     }
-    return this._super(store, primaryModelClass, responseJSON, id, requestType);
+    let jsonAPIRepresentation = this._super(store, primaryModelClass, responseJSON, id, requestType);
+    if (primaryModelClass.relatedCapabilities) {
+      jsonAPIRepresentation = primaryModelClass.relatedCapabilities(jsonAPIRepresentation);
+    }
+    return jsonAPIRepresentation;
   },
 
   serializeAttribute(snapshot, json, key, attributes) {
     const val = snapshot.attr(key);
-    const valHasNotChanged = Ember.isNone(snapshot.changedAttributes()[key]);
-    const valIsBlank = Ember.isBlank(val);
+    const valHasNotChanged = isNone(snapshot.changedAttributes()[key]);
+    const valIsBlank = isBlank(val);
     if (attributes.options.readOnly) {
       return;
     }

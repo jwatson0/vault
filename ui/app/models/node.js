@@ -1,11 +1,7 @@
-import Ember from 'ember';
-import DS from 'ember-data';
-const { attr } = DS;
+import Model, { attr } from '@ember-data/model';
+import { alias, and, equal } from '@ember/object/computed';
 
-const { computed } = Ember;
-const { equal, and, alias } = computed;
-
-export default DS.Model.extend({
+export default Model.extend({
   name: attr('string'),
   //https://www.vaultproject.io/docs/http/sys-health.html
   initialized: attr('boolean'),
@@ -26,13 +22,11 @@ export default DS.Model.extend({
   sealThreshold: alias('t'),
   sealNumShares: alias('n'),
   version: attr('string'),
+  type: attr('string'),
+  storageType: attr('string'),
 
   //https://www.vaultproject.io/docs/http/sys-leader.html
   haEnabled: attr('boolean'),
   isSelf: attr('boolean'),
   leaderAddress: attr('string'),
-
-  type: Ember.computed(function() {
-    return this.constructor.modelName;
-  }),
 });

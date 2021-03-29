@@ -1,7 +1,9 @@
-import Ember from 'ember';
-import moment from 'moment';
-
-const { get, set, computed, setProperties } = Ember;
+import { match } from '@ember/object/computed';
+import { assign } from '@ember/polyfills';
+import { inject as service } from '@ember/service';
+import Component from '@ember/component';
+import { setProperties, computed, set } from '@ember/object';
+import { addSeconds, parseISO } from 'date-fns';
 
 const DEFAULTS = {
   token: null,
@@ -12,6 +14,7 @@ const DEFAULTS = {
   creation_ttl: null,
   data: '{\n}',
   unwrap_data: null,
+  details: null,
   wrapTTL: null,
   sum: null,
   random_bytes: null,
@@ -20,9 +23,9 @@ const DEFAULTS = {
 
 const WRAPPING_ENDPOINTS = ['lookup', 'wrap', 'unwrap', 'rewrap'];
 
-export default Ember.Component.extend(DEFAULTS, {
-  store: Ember.inject.service(),
-  wizard: Ember.inject.service(),
+export default Component.extend(DEFAULTS, {
+  store: service(),
+  wizard: service(),
   // putting these attrs here so they don't get reset when you click back
   //random
   bytes: 32,
@@ -31,6 +34,7 @@ export default Ember.Component.extend(DEFAULTS, {
   algorithm: 'sha2-256',
 
   tagName: '',
+  unwrapActiveTab: 'data',
 
   didReceiveAttrs() {
     this._super(...arguments);
@@ -47,8 +51,8 @@ export default Ember.Component.extend(DEFAULTS, {
   },
 
   checkAction() {
-    const currentAction = get(this, 'selectedAction');
-    const oldAction = get(this, 'oldSelectedAction');
+    const currentAction = this.selectedAction;
+    const oldAction = this.oldSelectedAction;
 
     if (currentAction !== oldAction) {
       this.reset();
@@ -56,14 +60,15 @@ export default Ember.Component.extend(DEFAULTS, {
     set(this, 'oldSelectedAction', currentAction);
   },
 
-  dataIsEmpty: computed.match('data', new RegExp(DEFAULTS.data)),
+  dataIsEmpty: match('data', new RegExp(DEFAULTS.data)),
 
   expirationDate: computed('creation_time', 'creation_ttl', function() {
-    const { creation_time, creation_ttl } = this.getProperties('creation_time', 'creation_ttl');
+    const { creation_time, creation_ttl } = this;
     if (!(creation_time && creation_ttl)) {
       return null;
     }
-    return moment(creation_time).add(moment.duration(creation_ttl, 'seconds'));
+    // returns new Date with seconds added.
+    return addSeconds(parseISO(creation_time), creation_ttl);
   }),
 
   handleError(e) {
@@ -74,40 +79,44 @@ export default Ember.Component.extend(DEFAULTS, {
     let props = {};
     let secret = (resp && resp.data) || resp.auth;
     if (secret && action === 'unwrap') {
-      props = Ember.assign({}, props, { unwrap_data: secret });
+      let details = {
+        'Request ID': resp.request_id,
+        'Lease ID': resp.lease_id || 'None',
+        Renewable: resp.renewable ? 'Yes' : 'No',
+        'Lease Duration': resp.lease_duration || 'None',
+      };
+      props = assign({}, props, { unwrap_data: secret }, { details: details });
     }
-    props = Ember.assign({}, props, secret);
+    props = assign({}, props, secret);
     if (resp && resp.wrap_info) {
       const keyName = action === 'rewrap' ? 'rewrap_token' : 'token';
-      props = Ember.assign({}, props, { [keyName]: resp.wrap_info.token });
+      props = assign({}, props, { [keyName]: resp.wrap_info.token });
     }
     if (props.token || props.rewrap_token || props.unwrap_data || action === 'lookup') {
-      this.get('wizard').transitionFeatureMachine(this.get('wizard.featureState'), 'CONTINUE');
+      this.wizard.transitionFeatureMachine(this.wizard.featureState, 'CONTINUE');
     }
     setProperties(this, props);
   },
 
   getData() {
-    const action = get(this, 'selectedAction');
+    const action = this.selectedAction;
     if (WRAPPING_ENDPOINTS.includes(action)) {
-      return get(this, 'dataIsEmpty')
-        ? { token: (get(this, 'token') || '').trim() }
-        : JSON.parse(get(this, 'data'));
+      return this.dataIsEmpty ? { token: (this.token || '').trim() } : JSON.parse(this.data);
     }
     if (action === 'random') {
-      return this.getProperties('bytes');
+      return { bytes: this.bytes, format: this.format };
     }
 
     if (action === 'hash') {
-      return this.getProperties('input', 'format', 'algorithm');
+      return { input: this.input, format: this.format, algorithm: this.algorithm };
     }
   },
 
   actions: {
     doSubmit(evt) {
       evt.preventDefault();
-      const action = get(this, 'selectedAction');
-      const wrapTTL = action === 'wrap' ? get(this, 'wrapTTL') : null;
+      const action = this.selectedAction;
+      const wrapTTL = action === 'wrap' ? this.wrapTTL : null;
       const data = this.getData();
       setProperties(this, {
         errors: null,
@@ -116,7 +125,7 @@ export default Ember.Component.extend(DEFAULTS, {
         creation_ttl: null,
       });
 
-      get(this, 'store')
+      this.store
         .adapterFor('tools')
         .toolAction(action, data, { wrapTTL })
         .then(resp => this.handleSuccess(resp, action), (...errArgs) => this.handleError(...errArgs));
@@ -124,6 +133,11 @@ export default Ember.Component.extend(DEFAULTS, {
 
     onClear() {
       this.reset();
+    },
+
+    updateTtl(evt) {
+      const ttl = evt.enabled ? `${evt.seconds}s` : '30m';
+      set(this, 'wrapTTL', ttl);
     },
 
     codemirrorUpdated(val, codemirror) {

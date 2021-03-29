@@ -1,15 +1,14 @@
-import Ember from 'ember';
+import { hasMany, attr } from '@ember-data/model';
+import { computed } from '@ember/object';
+import { alias } from '@ember/object/computed';
 import IdentityModel from './_base';
-import DS from 'ember-data';
-import lazyCapabilities, { apiPath } from 'vault/macros/lazy-capabilities';
-import identityCapabilities from 'vault/macros/identity-capabilities';
+import apiPath from 'vault/utils/api-path';
+import attachCapabilities from 'vault/lib/attach-capabilities';
 
-const { computed } = Ember;
-
-const { attr, hasMany } = DS;
-
-export default IdentityModel.extend({
-  formFields: ['name', 'disabled', 'policies', 'metadata'],
+let Model = IdentityModel.extend({
+  formFields: computed(function() {
+    return ['name', 'disabled', 'policies', 'metadata'];
+  }),
   name: attr('string'),
   disabled: attr('boolean', {
     defaultValue: false,
@@ -21,7 +20,10 @@ export default IdentityModel.extend({
     editType: 'kv',
   }),
   policies: attr({
-    editType: 'stringArray',
+    label: 'Policies',
+    editType: 'searchSelect',
+    fallbackComponent: 'string-list',
+    models: ['policy/acl', 'policy/rgp'],
   }),
   creationTime: attr('string', {
     readOnly: true,
@@ -39,12 +41,13 @@ export default IdentityModel.extend({
   inheritedGroupIds: attr({
     readOnly: true,
   }),
+  canDelete: alias('updatePath.canDelete'),
+  canEdit: alias('updatePath.canUpdate'),
+  canRead: alias('updatePath.canRead'),
+  canAddAlias: alias('aliasPath.canCreate'),
+});
 
-  updatePath: identityCapabilities(),
-  canDelete: computed.alias('updatePath.canDelete'),
-  canEdit: computed.alias('updatePath.canUpdate'),
-  canRead: computed.alias('updatePath.canRead'),
-
-  aliasPath: lazyCapabilities(apiPath`identity/entity-alias`),
-  canAddAlias: computed.alias('aliasPath.canCreate'),
+export default attachCapabilities(Model, {
+  updatePath: apiPath`identity/entity/id/${'id'}`,
+  aliasPath: apiPath`identity/entity-alias`,
 });

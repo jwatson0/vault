@@ -1,9 +1,7 @@
-import Ember from 'ember';
-const { computed } = Ember;
+import { reads } from '@ember/object/computed';
+import Component from '@ember/component';
 
-export default Ember.Component.extend({
+export default Component.extend({
   content: null,
-  list: computed('content', function() {
-    return this.get('content').keys;
-  }),
+  list: reads('content.keys'),
 });

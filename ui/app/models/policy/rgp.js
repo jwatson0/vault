@@ -1,11 +1,8 @@
-import DS from 'ember-data';
-import Ember from 'ember';
+import { attr } from '@ember-data/model';
+import { computed } from '@ember/object';
 
 import PolicyModel from '../policy';
 import { expandAttributeMeta } from 'vault/utils/field-to-attrs';
-
-let { attr } = DS;
-let { computed } = Ember;
 
 export default PolicyModel.extend({
   enforcementLevel: attr('string', {

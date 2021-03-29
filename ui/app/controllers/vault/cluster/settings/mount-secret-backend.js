@@ -1,22 +1,25 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import Controller from '@ember/controller';
 import { supportedSecretBackends } from 'vault/helpers/supported-secret-backends';
 
 const SUPPORTED_BACKENDS = supportedSecretBackends();
 
-const { inject, Controller } = Ember;
-
 export default Controller.extend({
-  wizard: inject.service(),
+  wizard: service(),
   actions: {
     onMountSuccess: function(type, path) {
       let transition;
       if (SUPPORTED_BACKENDS.includes(type)) {
-        transition = this.transitionToRoute('vault.cluster.secrets.backend.index', path);
+        if (type === 'kmip') {
+          transition = this.transitionToRoute('vault.cluster.secrets.backend.kmip.scopes', path);
+        } else {
+          transition = this.transitionToRoute('vault.cluster.secrets.backend.index', path);
+        }
       } else {
         transition = this.transitionToRoute('vault.cluster.secrets.backends');
       }
       return transition.followRedirects().then(() => {
-        this.get('wizard').transitionFeatureMachine(this.get('wizard.featureState'), 'CONTINUE', type);
+        this.wizard.transitionFeatureMachine(this.wizard.featureState, 'CONTINUE', type);
       });
     },
     onConfigError: function(modelId) {

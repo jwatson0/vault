@@ -11,22 +11,29 @@ import (
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/api"
 	bplugin "github.com/hashicorp/vault/builtin/plugin"
-	"github.com/hashicorp/vault/helper/pluginutil"
-	"github.com/hashicorp/vault/logical"
-	"github.com/hashicorp/vault/logical/plugin"
-	"github.com/hashicorp/vault/logical/plugin/mock"
-	"github.com/hashicorp/vault/physical/inmem"
+	"github.com/hashicorp/vault/sdk/helper/consts"
+	"github.com/hashicorp/vault/sdk/helper/pluginutil"
+	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/hashicorp/vault/sdk/physical"
+	"github.com/hashicorp/vault/sdk/physical/inmem"
+	"github.com/hashicorp/vault/sdk/plugin"
+	"github.com/hashicorp/vault/sdk/plugin/mock"
 	"github.com/hashicorp/vault/vault"
 )
 
 func getPluginClusterAndCore(t testing.TB, logger log.Logger) (*vault.TestCluster, *vault.TestClusterCore) {
+	inm, err := inmem.NewTransactionalInmem(nil, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
 	inmha, err := inmem.NewInmemHA(nil, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	coreConfig := &vault.CoreConfig{
-		Physical: inmha,
+		Physical:   inm,
+		HAPhysical: inmha.(physical.HABackend),
 		LogicalBackends: map[string]logical.Factory{
 			"plugin": bplugin.Factory,
 		},
@@ -44,12 +51,11 @@ func getPluginClusterAndCore(t testing.TB, logger log.Logger) (*vault.TestCluste
 	os.Setenv(pluginutil.PluginCACertPEMEnv, cluster.CACertPEMFile)
 
 	vault.TestWaitActive(t, core.Core)
-	vault.TestAddTestPlugin(t, core.Core, "mock-plugin", "TestPlugin_PluginMain")
+	vault.TestAddTestPlugin(t, core.Core, "mock-plugin", consts.PluginTypeSecrets, "TestPlugin_PluginMain", []string{}, "")
 
 	// Mount the mock plugin
 	err = core.Client.Sys().Mount("mock", &api.MountInput{
-		Type:       "plugin",
-		PluginName: "mock-plugin",
+		Type: "mock-plugin",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -70,12 +76,12 @@ func TestPlugin_PluginMain(t *testing.T) {
 
 	args := []string{"--ca-cert=" + caPEM}
 
-	apiClientMeta := &pluginutil.APIClientMeta{}
+	apiClientMeta := &api.PluginAPIClientMeta{}
 	flags := apiClientMeta.FlagSet()
 	flags.Parse(args)
 
 	tlsConfig := apiClientMeta.GetTLSConfig()
-	tlsProviderFunc := pluginutil.VaultPluginTLSProvider(tlsConfig)
+	tlsProviderFunc := api.VaultPluginTLSProvider(tlsConfig)
 
 	factoryFunc := mock.FactoryType(logical.TypeLogical)
 

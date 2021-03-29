@@ -1,18 +1,18 @@
-import Ember from 'ember';
-import DS from 'ember-data';
+import Model from '@ember-data/model';
+import { assert } from '@ember/debug';
+import { computed } from '@ember/object';
 import { expandAttributeMeta } from 'vault/utils/field-to-attrs';
 
-const { assert, computed } = Ember;
-export default DS.Model.extend({
+export default Model.extend({
   formFields: computed(function() {
     return assert('formFields should be overridden', false);
   }),
 
   fields: computed('formFields', 'formFields.[]', function() {
-    return expandAttributeMeta(this, this.get('formFields'));
+    return expandAttributeMeta(this, this.formFields);
   }),
 
-  identityType: computed(function() {
+  identityType: computed('constructor.modelName', function() {
     let modelType = this.constructor.modelName.split('/')[1];
     return modelType;
   }),

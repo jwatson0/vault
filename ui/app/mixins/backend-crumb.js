@@ -1,8 +1,9 @@
-import Ember from 'ember';
+import { computed } from '@ember/object';
+import Mixin from '@ember/object/mixin';
 
-export default Ember.Mixin.create({
-  backendCrumb: Ember.computed('backend', function() {
-    const backend = this.get('backend');
+export default Mixin.create({
+  backendCrumb: computed('backend', function() {
+    const backend = this.backend;
 
     if (backend === undefined) {
       throw new Error('backend-crumb mixin requires backend to be set');

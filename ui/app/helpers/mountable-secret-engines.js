@@ -1,17 +1,44 @@
-import Ember from 'ember';
+import { helper as buildHelper } from '@ember/component/helper';
+
+export const KMIP = {
+  displayName: 'KMIP',
+  value: 'kmip',
+  type: 'kmip',
+  category: 'generic',
+  requiredFeature: 'KMIP',
+};
+
+export const TRANSFORM = {
+  displayName: 'Transform',
+  value: 'transform',
+  type: 'transform',
+  category: 'generic',
+  requiredFeature: 'Transform Secrets Engine',
+};
 
 const MOUNTABLE_SECRET_ENGINES = [
   {
     displayName: 'Active Directory',
     value: 'ad',
     type: 'ad',
-    glyph: 'azure',
+    category: 'cloud',
+  },
+  {
+    displayName: 'AliCloud',
+    value: 'alicloud',
+    type: 'alicloud',
     category: 'cloud',
   },
   {
     displayName: 'AWS',
     value: 'aws',
     type: 'aws',
+    category: 'cloud',
+  },
+  {
+    displayName: 'Azure',
+    value: 'azure',
+    type: 'azure',
     category: 'cloud',
   },
   {
@@ -30,6 +57,12 @@ const MOUNTABLE_SECRET_ENGINES = [
     displayName: 'Google Cloud',
     value: 'gcp',
     type: 'gcp',
+    category: 'cloud',
+  },
+  {
+    displayName: 'Google Cloud KMS',
+    value: 'gcpkms',
+    type: 'gcpkms',
     category: 'cloud',
   },
   {
@@ -77,7 +110,7 @@ const MOUNTABLE_SECRET_ENGINES = [
 ];
 
 export function engines() {
-  return MOUNTABLE_SECRET_ENGINES;
+  return MOUNTABLE_SECRET_ENGINES.slice();
 }
 
-export default Ember.Helper.helper(engines);
+export default buildHelper(engines);

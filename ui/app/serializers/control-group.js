@@ -1,10 +1,8 @@
-import DS from 'ember-data';
+import { EmbeddedRecordsMixin } from '@ember-data/serializer/rest';
+import { get } from '@ember/object';
 import ApplicationSerializer from './application';
-import Ember from 'ember';
 
-const { get } = Ember;
-
-export default ApplicationSerializer.extend(DS.EmbeddedRecordsMixin, {
+export default ApplicationSerializer.extend(EmbeddedRecordsMixin, {
   attrs: {
     requestEntity: { embedded: 'always' },
     authorizations: { embedded: 'always' },

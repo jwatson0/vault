@@ -1,7 +1,5 @@
+import { assign } from '@ember/polyfills';
 import IvyCodemirrorComponent from './ivy-codemirror';
-import Ember from 'ember';
-
-const { assign } = Ember;
 const JSON_EDITOR_DEFAULTS = {
   // IMPORTANT: `gutters` must come before `lint` since the presence of
   // `gutters` is cached internally when `lint` is toggled
@@ -18,7 +16,7 @@ const JSON_EDITOR_DEFAULTS = {
 export default IvyCodemirrorComponent.extend({
   'data-test-component': 'json-editor',
   updateCodeMirrorOptions() {
-    const options = assign({}, JSON_EDITOR_DEFAULTS, this.get('options'));
+    const options = assign({}, JSON_EDITOR_DEFAULTS, this.options);
     if (options.autoHeight) {
       options.viewportMargin = Infinity;
       delete options.autoHeight;

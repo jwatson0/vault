@@ -1,68 +1,74 @@
-import { test } from 'qunit';
-import moduleForAcceptance from 'vault/tests/helpers/module-for-acceptance';
+import { currentRouteName, settled, visit } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+import { setupApplicationTest } from 'ember-qunit';
 import editPage from 'vault/tests/pages/secrets/backend/pki/edit-role';
 import showPage from 'vault/tests/pages/secrets/backend/pki/show';
 import listPage from 'vault/tests/pages/secrets/backend/list';
+import enablePage from 'vault/tests/pages/settings/mount-secret-backend';
+import authPage from 'vault/tests/pages/auth';
 
-moduleForAcceptance('Acceptance | secrets/pki/create', {
-  beforeEach() {
-    return authLogin();
-  },
-});
+module('Acceptance | secrets/pki/create', function(hooks) {
+  setupApplicationTest(hooks);
 
-const mountAndNav = assert => {
-  const path = `pki-${new Date().getTime()}`;
-  mountSupportedSecretBackend(assert, 'pki', path);
-  editPage.visitRoot({ backend: path });
-  return path;
-};
+  hooks.beforeEach(function() {
+    return authPage.login();
+  });
 
-test('it creates a role and redirects', function(assert) {
-  const path = mountAndNav(assert);
-  editPage.createRole('role', 'example.com');
-  andThen(() => {
+  test('it creates a role and redirects', async function(assert) {
+    const path = `pki-${new Date().getTime()}`;
+    await enablePage.enable('pki', path);
+    await settled();
+    await editPage.visitRoot({ backend: path });
+    await settled();
+    await editPage.createRole('role', 'example.com');
+    await settled();
     assert.equal(currentRouteName(), 'vault.cluster.secrets.backend.show', 'redirects to the show page');
-    assert.ok(showPage.editIsPresent, 'shows the edit button');
-    assert.ok(showPage.generateCertIsPresent, 'shows the generate button');
-    assert.ok(showPage.signCertIsPresent, 'shows the sign button');
-  });
+    assert.dom('[data-test-edit-link="true"]').exists('shows the edit button');
+    assert.dom('[data-test-credentials-link="true"]').exists('shows the generate button');
+    assert.dom('[data-test-sign-link="true"]').exists('shows the sign button');
 
-  showPage.visit({ backend: path, id: 'role' });
-  showPage.generateCert();
-  andThen(() => {
+    await showPage.visit({ backend: path, id: 'role' });
+    await settled();
+    await showPage.generateCert();
+    await settled();
     assert.equal(
       currentRouteName(),
       'vault.cluster.secrets.backend.credentials',
       'navs to the credentials page'
     );
-  });
 
-  showPage.visit({ backend: path, id: 'role' });
-  showPage.signCert();
-  andThen(() => {
+    await showPage.visit({ backend: path, id: 'role' });
+    await settled();
+    await visit(`/vault/secrets/${path}/credentials/role?action=sign`);
+
+    await settled();
     assert.equal(
       currentRouteName(),
       'vault.cluster.secrets.backend.credentials',
       'navs to the credentials page'
     );
-  });
 
-  listPage.visitRoot({ backend: path });
-  andThen(() => {
+    await listPage.visitRoot({ backend: path });
+    await settled();
     assert.equal(listPage.secrets.length, 1, 'shows role in the list');
-  });
-});
-
-test('it deletes a role', function(assert) {
-  mountAndNav(assert);
-  editPage.createRole('role', 'example.com');
-  showPage.edit();
-  andThen(() => {
-    assert.equal(currentRouteName(), 'vault.cluster.secrets.backend.edit', 'navs to the edit page');
+    let secret = listPage.secrets.objectAt(0);
+    await secret.menuToggle();
+    await settled();
+    assert.ok(listPage.menuItems.length > 0, 'shows links in the menu');
   });
 
-  editPage.deleteRole();
-  andThen(() => {
+  test('it deletes a role', async function(assert) {
+    const path = `pki-${new Date().getTime()}`;
+    await enablePage.enable('pki', path);
+    await settled();
+    await editPage.visitRoot({ backend: path });
+    await settled();
+    await editPage.createRole('role', 'example.com');
+    await settled();
+    await showPage.visit({ backend: path, id: 'role' });
+    await settled();
+    await showPage.deleteRole();
+    await settled();
     assert.equal(currentRouteName(), 'vault.cluster.secrets.backend.list-root', 'redirects to list page');
     assert.ok(listPage.backendIsEmpty, 'no roles listed');
   });

@@ -4,6 +4,10 @@ import flashMessages from '../../components/flash-message';
 
 export default create({
   visit: visitable('/vault/settings/auth/enable'),
-  form: backendForm,
+  ...backendForm,
   flash: flashMessages,
+  enable: async function(type, path) {
+    await this.visit();
+    await this.mount(type, path);
+  },
 });

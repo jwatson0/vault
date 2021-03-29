@@ -1,12 +1,11 @@
-import Ember from 'ember';
+import Component from '@glimmer/component';
 
-export default Ember.Component.extend({
-  tagName: '',
-
+export default class SecretListHeader extends Component {
   // api
-  isCertTab: false,
-  isConfigure: false,
-  baseKey: null,
-  backendCrumb: null,
-  model: null,
-});
+  isCertTab = false;
+  isConfigure = false;
+  baseKey = null;
+  backendCrumb = null;
+  model = null;
+  options = null;
+}

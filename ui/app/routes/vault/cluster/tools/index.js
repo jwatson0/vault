@@ -1,10 +1,11 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import Route from '@ember/routing/route';
 import { toolsActions } from 'vault/helpers/tools-actions';
 
-export default Ember.Route.extend({
-  currentCluster: Ember.inject.service(),
+export default Route.extend({
+  currentCluster: service(),
   beforeModel(transition) {
-    const currentCluster = this.get('currentCluster.cluster.name');
+    const currentCluster = this.currentCluster.cluster.name;
     const supportedActions = toolsActions();
     if (transition.targetName === this.routeName) {
       transition.abort();

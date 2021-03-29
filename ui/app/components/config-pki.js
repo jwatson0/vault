@@ -1,10 +1,10 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import Component from '@ember/component';
+import { get } from '@ember/object';
 
-const { get, inject } = Ember;
-
-export default Ember.Component.extend({
+export default Component.extend({
   classNames: 'config-pki',
-  flashMessages: inject.service(),
+  flashMessages: service(),
 
   /*
    *
@@ -32,14 +32,14 @@ export default Ember.Component.extend({
    * function that gets called to refresh the config model
    *
    */
-  onRefresh: () => {},
+  onRefresh() {},
 
   loading: false,
 
   actions: {
     save(section) {
       this.set('loading', true);
-      const config = this.get('config');
+      const config = this.config;
       config
         .save({
           adapterOptions: {
@@ -48,19 +48,22 @@ export default Ember.Component.extend({
           },
         })
         .then(() => {
-          this.get('flashMessages').success(`The ${section} config for this backend has been updated.`);
+          this.flashMessages.success(`The ${section} config for this backend has been updated.`);
           // attrs aren't persistent for Tidy
           if (section === 'tidy') {
             config.rollbackAttributes();
           }
           this.send('refresh');
         })
+        .catch(() => {
+          // handle promise rejection - error will be shown by message-error component
+        })
         .finally(() => {
           this.set('loading', false);
         });
     },
     refresh() {
-      this.get('onRefresh')();
+      this.onRefresh();
     },
   },
 });

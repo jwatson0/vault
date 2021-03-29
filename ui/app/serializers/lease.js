@@ -1,8 +1,7 @@
-import DS from 'ember-data';
-import Ember from 'ember';
-const { decamelize } = Ember.String;
+import RESTSerializer from '@ember-data/serializer/rest';
+import { decamelize } from '@ember/string';
 
-export default DS.RESTSerializer.extend({
+export default RESTSerializer.extend({
   keyForAttribute: function(attr) {
     return decamelize(attr);
   },

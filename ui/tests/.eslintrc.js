@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 module.exports = {
   env: {
     embertest: true,
@@ -10,6 +11,5 @@ module.exports = {
     authLogin: false,
     pollCluster: false,
     mountSupportedSecretBackend: false,
-    wait: true,
   },
 };

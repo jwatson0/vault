@@ -1,23 +1,21 @@
-import DS from 'ember-data';
-import Ember from 'ember';
+import Model, { attr } from '@ember-data/model';
+import { alias } from '@ember/object/computed';
+import { computed } from '@ember/object';
 import lazyCapabilities, { apiPath } from 'vault/macros/lazy-capabilities';
 
-let { attr } = DS;
-let { computed } = Ember;
-
-export default DS.Model.extend({
+export default Model.extend({
   name: attr('string'),
   policy: attr('string'),
-  policyType: computed(function() {
+  policyType: computed('constructor.modelName', function() {
     return this.constructor.modelName.split('/')[1];
   }),
 
   updatePath: lazyCapabilities(apiPath`sys/policies/${'policyType'}/${'id'}`, 'id', 'policyType'),
-  canDelete: computed.alias('updatePath.canDelete'),
-  canEdit: computed.alias('updatePath.canUpdate'),
-  canRead: computed.alias('updatePath.canRead'),
+  canDelete: alias('updatePath.canDelete'),
+  canEdit: alias('updatePath.canUpdate'),
+  canRead: alias('updatePath.canRead'),
   format: computed('policy', function() {
-    let policy = this.get('policy');
+    let policy = this.policy;
     let isJSON;
     try {
       let parsed = JSON.parse(policy);

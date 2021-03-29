@@ -1,6 +1,7 @@
-import Ember from 'ember';
+import { capitalize } from '@ember/string';
+import Component from '@ember/component';
+import { computed } from '@ember/object';
 import columnify from 'columnify';
-const { computed } = Ember;
 
 export function stringifyObjectValues(data) {
   Object.keys(data).forEach(item => {
@@ -12,16 +13,16 @@ export function stringifyObjectValues(data) {
   });
 }
 
-export default Ember.Component.extend({
+export default Component.extend({
   content: null,
   columns: computed('content', function() {
-    let data = this.get('content');
+    let data = this.content;
     stringifyObjectValues(data);
 
     return columnify(data, {
       preserveNewLines: true,
       headingTransform: function(heading) {
-        return Ember.String.capitalize(heading);
+        return capitalize(heading);
       },
     });
   }),

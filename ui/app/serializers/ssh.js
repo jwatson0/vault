@@ -1,8 +1,9 @@
-import DS from 'ember-data';
-import Ember from 'ember';
-const { decamelize } = Ember.String;
+import RESTSerializer from '@ember-data/serializer/rest';
+import { isNone, isBlank } from '@ember/utils';
+import { assign } from '@ember/polyfills';
+import { decamelize } from '@ember/string';
 
-export default DS.RESTSerializer.extend({
+export default RESTSerializer.extend({
   keyForAttribute: function(attr) {
     return decamelize(attr);
   },
@@ -19,7 +20,7 @@ export default DS.RESTSerializer.extend({
   },
 
   normalizeItems(payload) {
-    Ember.assign(payload, payload.data);
+    assign(payload, payload.data);
     delete payload.data;
     return payload;
   },
@@ -41,11 +42,11 @@ export default DS.RESTSerializer.extend({
       attributes.type === 'object' &&
       val &&
       Object.keys(val).length > 0 &&
-      Ember.isNone(snapshot.changedAttributes()[key])
+      isNone(snapshot.changedAttributes()[key])
     ) {
       return;
     }
-    if (Ember.isBlank(val) && Ember.isNone(snapshot.changedAttributes()[key])) {
+    if (isBlank(val) && isNone(snapshot.changedAttributes()[key])) {
       return;
     }
 

@@ -1,8 +1,6 @@
-import DS from 'ember-data';
-import Ember from 'ember';
+import Model, { attr } from '@ember-data/model';
+import { computed } from '@ember/object';
 import { expandAttributeMeta } from 'vault/utils/field-to-attrs';
-const { attr } = DS;
-const { computed } = Ember;
 const CREATE_FIELDS = [
   'publicKey',
   'keyId',
@@ -15,11 +13,14 @@ const CREATE_FIELDS = [
 
 const DISPLAY_FIELDS = ['signedKey', 'leaseId', 'renewable', 'leaseDuration', 'serialNumber'];
 
-export default DS.Model.extend({
+export default Model.extend({
   role: attr('object', {
     readOnly: true,
   }),
-  publicKey: attr('string'),
+  publicKey: attr('string', {
+    label: 'Public Key',
+    editType: 'textarea',
+  }),
   ttl: attr({
     label: 'TTL',
     editType: 'ttl',
@@ -45,7 +46,7 @@ export default DS.Model.extend({
   signedKey: attr('string'),
 
   attrs: computed('signedKey', function() {
-    let keys = this.get('signedKey') ? DISPLAY_FIELDS.slice(0) : CREATE_FIELDS.slice(0);
+    let keys = this.signedKey ? DISPLAY_FIELDS.slice(0) : CREATE_FIELDS.slice(0);
     return expandAttributeMeta(this, keys);
   }),
 });

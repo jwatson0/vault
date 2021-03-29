@@ -1,10 +1,7 @@
-import DS from 'ember-data';
-import Ember from 'ember';
+import { attr } from '@ember-data/model';
+import { computed } from '@ember/object';
 import { expandAttributeMeta } from 'vault/utils/field-to-attrs';
 import AuthConfig from '../../auth-config';
-
-const { attr } = DS;
-const { computed } = Ember;
 
 export default AuthConfig.extend({
   safetyBuffer: attr({

@@ -1,18 +1,13 @@
-import Ember from 'ember';
-import DS from 'ember-data';
-import lazyCapabilities, { apiPath } from 'vault/macros/lazy-capabilities';
+import Model, { attr } from '@ember-data/model';
+import { computed } from '@ember/object';
 import { fragment } from 'ember-data-model-fragments/attributes';
-
 import fieldToAttrs, { expandAttributeMeta } from 'vault/utils/field-to-attrs';
-
-const { attr } = DS;
-const { computed } = Ember;
 
 //identity will be managed separately and the inclusion
 //of the system backend is an implementation detail
 const LIST_EXCLUDED_BACKENDS = ['system', 'identity'];
 
-export default DS.Model.extend({
+export default Model.extend({
   path: attr('string'),
   accessor: attr('string'),
   name: attr('string'),
@@ -26,7 +21,7 @@ export default DS.Model.extend({
   options: fragment('mount-options', { defaultValue: {} }),
   local: attr('boolean', {
     helpText:
-      'When replication is enabled, a local mount will not be replicated across clusters. This can only be specified at mount time.',
+      'When Replication is enabled, a local mount will not be replicated across clusters. This can only be specified at mount time.',
   }),
   sealWrap: attr('boolean', {
     helpText:
@@ -34,8 +29,8 @@ export default DS.Model.extend({
   }),
 
   modelTypeForKV: computed('engineType', 'options.version', function() {
-    let type = this.get('engineType');
-    let version = this.get('options.version');
+    let type = this.engineType;
+    let version = this.options?.version;
     let modelType = 'secret';
     if ((type === 'kv' || type === 'generic') && version === 2) {
       modelType = 'secret-v2';
@@ -43,8 +38,10 @@ export default DS.Model.extend({
     return modelType;
   }),
 
+  isV2KV: computed.equal('modelTypeForKV', 'secret-v2'),
+
   formFields: computed('engineType', function() {
-    let type = this.get('engineType');
+    let type = this.engineType;
     let fields = [
       'type',
       'path',
@@ -61,10 +58,26 @@ export default DS.Model.extend({
   }),
 
   formFieldGroups: computed('engineType', function() {
-    let type = this.get('engineType');
+    let type = this.engineType;
     let defaultGroup = { default: ['path'] };
     if (type === 'kv' || type === 'generic') {
       defaultGroup.default.push('options.{version}');
+    }
+    if (type === 'database') {
+      // For the Database Secret Engine we want to highlight the defaultLeaseTtl and maxLeaseTtl, removing them from the options object
+      defaultGroup.default.push('config.{defaultLeaseTtl}', 'config.{maxLeaseTtl}');
+      return [
+        defaultGroup,
+        {
+          'Method Options': [
+            'description',
+            'config.listingVisibility',
+            'local',
+            'sealWrap',
+            'config.{auditNonHmacRequestKeys,auditNonHmacResponseKeys,passthroughRequestHeaders}',
+          ],
+        },
+      ];
     }
     return [
       defaultGroup,
@@ -81,25 +94,25 @@ export default DS.Model.extend({
   }),
 
   attrs: computed('formFields', function() {
-    return expandAttributeMeta(this, this.get('formFields'));
+    return expandAttributeMeta(this, this.formFields);
   }),
 
   fieldGroups: computed('formFieldGroups', function() {
-    return fieldToAttrs(this, this.get('formFieldGroups'));
+    return fieldToAttrs(this, this.formFieldGroups);
   }),
 
   // namespaces introduced types with a `ns_` prefix for built-in engines
   // so we need to strip that to normalize the type
   engineType: computed('type', function() {
-    return (this.get('type') || '').replace(/^ns_/, '');
+    return (this.type || '').replace(/^ns_/, '');
   }),
 
   shouldIncludeInList: computed('engineType', function() {
-    return !LIST_EXCLUDED_BACKENDS.includes(this.get('engineType'));
+    return !LIST_EXCLUDED_BACKENDS.includes(this.engineType);
   }),
 
-  localDisplay: Ember.computed('local', function() {
-    return this.get('local') ? 'local' : 'replicated';
+  localDisplay: computed('local', function() {
+    return this.local ? 'local' : 'replicated';
   }),
 
   // ssh specific ones
@@ -110,7 +123,7 @@ export default DS.Model.extend({
   }),
 
   saveCA(options) {
-    if (this.get('type') !== 'ssh') {
+    if (this.type !== 'ssh') {
       return;
     }
     if (options.isDelete) {
@@ -136,9 +149,6 @@ export default DS.Model.extend({
       },
     });
   },
-
-  zeroAddressPath: lazyCapabilities(apiPath`${'id'}/config/zeroaddress`, 'id'),
-  canEditZeroAddress: computed.alias('zeroAddressPath.canUpdate'),
 
   // aws backend attrs
   lease: attr('string'),

@@ -1,34 +1,37 @@
-import { test } from 'qunit';
-import moduleForAcceptance from 'vault/tests/helpers/module-for-acceptance';
+import { currentRouteName, settled } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+import { setupApplicationTest } from 'ember-qunit';
 import page from 'vault/tests/pages/settings/auth/enable';
 import listPage from 'vault/tests/pages/access/methods';
+import authPage from 'vault/tests/pages/auth';
 
-moduleForAcceptance('Acceptance | settings/auth/enable', {
-  beforeEach() {
-    return authLogin();
-  },
-});
+module('Acceptance | settings/auth/enable', function(hooks) {
+  setupApplicationTest(hooks);
 
-test('it mounts and redirects', function(assert) {
-  // always force the new mount to the top of the list
-  const path = `approle-${new Date().getTime()}`;
-  const type = 'approle';
-  page.visit();
-  andThen(() => {
-    assert.equal(currentRouteName(), 'vault.cluster.settings.auth.enable');
-    page.form.mount(type, path);
+  hooks.beforeEach(function() {
+    return authPage.login();
   });
-  andThen(() => {
-    assert.equal(
+
+  test('it mounts and redirects', async function(assert) {
+    // always force the new mount to the top of the list
+    const path = `approle-${new Date().getTime()}`;
+    const type = 'approle';
+    await page.visit();
+    assert.equal(currentRouteName(), 'vault.cluster.settings.auth.enable');
+    await page.enable(type, path);
+    await settled();
+    await assert.equal(
       page.flash.latestMessage,
-      `Successfully mounted ${type} auth method at ${path}.`,
+      `Successfully mounted the ${type} auth method at ${path}.`,
       'success flash shows'
     );
     assert.equal(
       currentRouteName(),
-      'vault.cluster.access.methods',
-      'redirects to the auth backend list page'
+      'vault.cluster.settings.auth.configure.section',
+      'redirects to the auth config page'
     );
-    assert.ok(listPage.backendLinks().findById(path), 'mount is present in the list');
+
+    await listPage.visit();
+    assert.ok(listPage.findLinkById(path), 'mount is present in the list');
   });
 });

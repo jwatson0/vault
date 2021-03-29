@@ -1,9 +1,10 @@
-import Ember from 'ember';
-const { assert, inject, Component } = Ember;
+import { inject as service } from '@ember/service';
+import { assert } from '@ember/debug';
+import Component from '@ember/component';
 
 export default Component.extend({
   tagName: '',
-  flashMessages: inject.service(),
+  flashMessages: service(),
   params: null,
   successMessage() {
     return 'Save was successful';
@@ -28,12 +29,12 @@ export default Component.extend({
       let messageArgs = this.messageArgs(...args);
       return this.transaction(...args)
         .then(() => {
-          this.get('onSuccess')();
-          this.get('flashMessages').success(this.successMessage(...messageArgs));
+          this.onSuccess();
+          this.flashMessages.success(this.successMessage(...messageArgs));
         })
         .catch(e => {
           this.onError(...messageArgs);
-          this.get('flashMessages').success(this.errorMessage(e, ...messageArgs));
+          this.flashMessages.success(this.errorMessage(e, ...messageArgs));
         });
     },
   },

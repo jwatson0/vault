@@ -11,13 +11,26 @@ export default create({
   back: clickable('[data-test-secret-generate-back]'),
   certificate: text('[data-test-row-value="Certificate"]'),
   toggleOptions: clickable('[data-test-toggle-group]'),
+  enableTtl: clickable('[data-test-toggle-input]'),
   hasCert: isPresent('[data-test-row-value="Certificate"]'),
-  fillInField: fillable('[data-test-field]'),
-  issueCert(commonName) {
-    return this.commonName(commonName).toggleOptions().fillInField('unit', 'h').submit();
+  fillInTime: fillable('[data-test-ttl-value]'),
+  fillInField: fillable('[data-test-select="ttl-unit"]'),
+  issueCert: async function(commonName) {
+    await this.commonName(commonName)
+      .toggleOptions()
+      .enableTtl()
+      .fillInField('h')
+      .fillInTime('30')
+      .submit();
   },
 
-  sign(commonName, csr) {
-    return this.csr(csr).commonName(commonName).toggleOptions().fillInField('unit', 'h').submit();
+  sign: async function(commonName, csr) {
+    return this.csr(csr)
+      .commonName(commonName)
+      .toggleOptions()
+      .enableTtl()
+      .fillInField('h')
+      .fillInTime('30')
+      .submit();
   },
 });

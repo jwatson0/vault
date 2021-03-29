@@ -13,7 +13,8 @@ export default {
   }),
   lastLogOutput: getter(function() {
     let count = this.logOutputItems.length;
-    return this.logOutputItems.objectAt(count - 1).text;
+    let outputItemText = this.logOutputItems.objectAt(count - 1).text;
+    return outputItemText;
   }),
   logTextItems: collection('[data-test-component="console/log-text"]', {
     text: text(),
@@ -39,11 +40,11 @@ export default {
     eventProperties: { keyCode: keys.ENTER },
   }),
   hasInput: isPresent('[data-test-component="console/command-input"] input'),
-  runCommands(commands) {
+  runCommands: async function(commands) {
     let toExecute = Array.isArray(commands) ? commands : [commands];
-    return toExecute.forEach(command => {
-      this.consoleInput(command);
-      this.enter();
-    });
+    for (let command of toExecute) {
+      await this.consoleInput(command);
+      await this.enter();
+    }
   },
 };

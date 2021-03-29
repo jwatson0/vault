@@ -1,10 +1,11 @@
-import Ember from 'ember';
-import DS from 'ember-data';
+import AdapterError from '@ember-data/adapter/error';
+import { set } from '@ember/object';
+import Route from '@ember/routing/route';
 
 const SECTIONS_FOR_TYPE = {
   pki: ['cert', 'urls', 'crl', 'tidy'],
 };
-export default Ember.Route.extend({
+export default Route.extend({
   fetchModel() {
     const { section_name: sectionName } = this.paramsFor(this.routeName);
     const backendModel = this.modelFor('vault.cluster.settings.configure-secret-backend');
@@ -27,8 +28,8 @@ export default Ember.Route.extend({
     const sections = SECTIONS_FOR_TYPE[backendModel.get('type')];
     const hasSection = sections.includes(sectionName);
     if (!backendModel || !hasSection) {
-      const error = new DS.AdapterError();
-      Ember.set(error, 'httpStatus', 404);
+      const error = new AdapterError();
+      set(error, 'httpStatus', 404);
       throw error;
     }
     return this.fetchModel();

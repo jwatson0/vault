@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/go-test/deep"
+
 	"github.com/fatih/structs"
 	"github.com/hashicorp/vault/vault"
 )
@@ -27,57 +29,111 @@ func TestSysMounts(t *testing.T) {
 		"auth":           nil,
 		"data": map[string]interface{}{
 			"secret/": map[string]interface{}{
-				"description": "key/value secret storage",
-				"type":        "kv",
+				"description":             "key/value secret storage",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"sys/": map[string]interface{}{
-				"description": "system endpoints used for control, policy and debugging",
-				"type":        "system",
+				"description":             "system endpoints used for control, policy and debugging",
+				"type":                    "system",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
-					"default_lease_ttl": json.Number("0"),
-					"max_lease_ttl":     json.Number("0"),
-					"force_no_cache":    false,
-					"plugin_name":       "",
+					"default_lease_ttl":           json.Number("0"),
+					"max_lease_ttl":               json.Number("0"),
+					"force_no_cache":              false,
+					"passthrough_request_headers": []interface{}{"Accept"},
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"cubbyhole/": map[string]interface{}{
-				"description": "per-token private secret storage",
-				"type":        "cubbyhole",
+				"description":             "per-token private secret storage",
+				"type":                    "cubbyhole",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     true,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"identity/": map[string]interface{}{
-				"description": "identity store",
-				"type":        "identity",
+				"description":             "identity store",
+				"type":                    "identity",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
+		},
+		"secret/": map[string]interface{}{
+			"description":             "key/value secret storage",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"sys/": map[string]interface{}{
+			"description":             "system endpoints used for control, policy and debugging",
+			"type":                    "system",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl":           json.Number("0"),
+				"max_lease_ttl":               json.Number("0"),
+				"force_no_cache":              false,
+				"passthrough_request_headers": []interface{}{"Accept"},
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"cubbyhole/": map[string]interface{}{
+			"description":             "per-token private secret storage",
+			"type":                    "cubbyhole",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     true,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"identity/": map[string]interface{}{
+			"description":             "identity store",
+			"type":                    "identity",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
 		},
 	}
 	testResponseStatus(t, resp, 200)
@@ -87,11 +143,17 @@ func TestSysMounts(t *testing.T) {
 		if v.(map[string]interface{})["accessor"] == "" {
 			t.Fatalf("no accessor from %s", k)
 		}
+		if v.(map[string]interface{})["uuid"] == "" {
+			t.Fatalf("no uuid from %s", k)
+		}
+		expected[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 		expected["data"].(map[string]interface{})[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected["data"].(map[string]interface{})[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("bad: expected: %#v\nactual: %#v\n", expected, actual)
+	if diff := deep.Equal(actual, expected); len(diff) > 0 {
+		t.Fatalf("bad, diff: %#v", diff)
 	}
 }
 
@@ -122,70 +184,137 @@ func TestSysMount(t *testing.T) {
 		"auth":           nil,
 		"data": map[string]interface{}{
 			"foo/": map[string]interface{}{
-				"description": "foo",
-				"type":        "kv",
+				"description":             "foo",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"secret/": map[string]interface{}{
-				"description": "key/value secret storage",
-				"type":        "kv",
+				"description":             "key/value secret storage",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"sys/": map[string]interface{}{
-				"description": "system endpoints used for control, policy and debugging",
-				"type":        "system",
+				"description":             "system endpoints used for control, policy and debugging",
+				"type":                    "system",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
-					"default_lease_ttl": json.Number("0"),
-					"max_lease_ttl":     json.Number("0"),
-					"force_no_cache":    false,
-					"plugin_name":       "",
+					"default_lease_ttl":           json.Number("0"),
+					"max_lease_ttl":               json.Number("0"),
+					"force_no_cache":              false,
+					"passthrough_request_headers": []interface{}{"Accept"},
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"cubbyhole/": map[string]interface{}{
-				"description": "per-token private secret storage",
-				"type":        "cubbyhole",
+				"description":             "per-token private secret storage",
+				"type":                    "cubbyhole",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     true,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"identity/": map[string]interface{}{
-				"description": "identity store",
-				"type":        "identity",
+				"description":             "identity store",
+				"type":                    "identity",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
+		},
+		"foo/": map[string]interface{}{
+			"description":             "foo",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"secret/": map[string]interface{}{
+			"description":             "key/value secret storage",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"sys/": map[string]interface{}{
+			"description":             "system endpoints used for control, policy and debugging",
+			"type":                    "system",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl":           json.Number("0"),
+				"max_lease_ttl":               json.Number("0"),
+				"force_no_cache":              false,
+				"passthrough_request_headers": []interface{}{"Accept"},
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"cubbyhole/": map[string]interface{}{
+			"description":             "per-token private secret storage",
+			"type":                    "cubbyhole",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     true,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"identity/": map[string]interface{}{
+			"description":             "identity store",
+			"type":                    "identity",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
 		},
 	}
 	testResponseStatus(t, resp, 200)
@@ -195,12 +324,19 @@ func TestSysMount(t *testing.T) {
 		if v.(map[string]interface{})["accessor"] == "" {
 			t.Fatalf("no accessor from %s", k)
 		}
+		if v.(map[string]interface{})["uuid"] == "" {
+			t.Fatalf("no uuid from %s", k)
+		}
+		expected[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 		expected["data"].(map[string]interface{})[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected["data"].(map[string]interface{})[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("bad: expected: %#v\nactual: %#v\n", expected, actual)
+	if diff := deep.Equal(actual, expected); len(diff) > 0 {
+		t.Fatalf("bad, diff: %#v", diff)
 	}
+
 }
 
 func TestSysMount_put(t *testing.T) {
@@ -249,70 +385,137 @@ func TestSysRemount(t *testing.T) {
 		"auth":           nil,
 		"data": map[string]interface{}{
 			"bar/": map[string]interface{}{
-				"description": "foo",
-				"type":        "kv",
+				"description":             "foo",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{},
 			},
 			"secret/": map[string]interface{}{
-				"description": "key/value secret storage",
-				"type":        "kv",
+				"description":             "key/value secret storage",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"sys/": map[string]interface{}{
-				"description": "system endpoints used for control, policy and debugging",
-				"type":        "system",
+				"description":             "system endpoints used for control, policy and debugging",
+				"type":                    "system",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
-					"default_lease_ttl": json.Number("0"),
-					"max_lease_ttl":     json.Number("0"),
-					"force_no_cache":    false,
-					"plugin_name":       "",
+					"default_lease_ttl":           json.Number("0"),
+					"max_lease_ttl":               json.Number("0"),
+					"force_no_cache":              false,
+					"passthrough_request_headers": []interface{}{"Accept"},
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"cubbyhole/": map[string]interface{}{
-				"description": "per-token private secret storage",
-				"type":        "cubbyhole",
+				"description":             "per-token private secret storage",
+				"type":                    "cubbyhole",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     true,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"identity/": map[string]interface{}{
-				"description": "identity store",
-				"type":        "identity",
+				"description":             "identity store",
+				"type":                    "identity",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
+		},
+		"bar/": map[string]interface{}{
+			"description":             "foo",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{},
+		},
+		"secret/": map[string]interface{}{
+			"description":             "key/value secret storage",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"sys/": map[string]interface{}{
+			"description":             "system endpoints used for control, policy and debugging",
+			"type":                    "system",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl":           json.Number("0"),
+				"max_lease_ttl":               json.Number("0"),
+				"force_no_cache":              false,
+				"passthrough_request_headers": []interface{}{"Accept"},
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"cubbyhole/": map[string]interface{}{
+			"description":             "per-token private secret storage",
+			"type":                    "cubbyhole",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     true,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"identity/": map[string]interface{}{
+			"description":             "identity store",
+			"type":                    "identity",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
 		},
 	}
 	testResponseStatus(t, resp, 200)
@@ -322,11 +525,17 @@ func TestSysRemount(t *testing.T) {
 		if v.(map[string]interface{})["accessor"] == "" {
 			t.Fatalf("no accessor from %s", k)
 		}
+		if v.(map[string]interface{})["uuid"] == "" {
+			t.Fatalf("no uuid from %s", k)
+		}
+		expected[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 		expected["data"].(map[string]interface{})[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected["data"].(map[string]interface{})[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 	}
 
 	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("bad:\ngot\n%#v\nexpected\n%#v\n", actual, expected)
+		t.Fatalf("bad:\nExpected: %#v\nActual: %#v\n", expected, actual)
 	}
 }
 
@@ -357,57 +566,111 @@ func TestSysUnmount(t *testing.T) {
 		"auth":           nil,
 		"data": map[string]interface{}{
 			"secret/": map[string]interface{}{
-				"description": "key/value secret storage",
-				"type":        "kv",
+				"description":             "key/value secret storage",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"sys/": map[string]interface{}{
-				"description": "system endpoints used for control, policy and debugging",
-				"type":        "system",
+				"description":             "system endpoints used for control, policy and debugging",
+				"type":                    "system",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
-					"default_lease_ttl": json.Number("0"),
-					"max_lease_ttl":     json.Number("0"),
-					"force_no_cache":    false,
-					"plugin_name":       "",
+					"default_lease_ttl":           json.Number("0"),
+					"max_lease_ttl":               json.Number("0"),
+					"force_no_cache":              false,
+					"passthrough_request_headers": []interface{}{"Accept"},
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"cubbyhole/": map[string]interface{}{
-				"description": "per-token private secret storage",
-				"type":        "cubbyhole",
+				"description":             "per-token private secret storage",
+				"type":                    "cubbyhole",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     true,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"identity/": map[string]interface{}{
-				"description": "identity store",
-				"type":        "identity",
+				"description":             "identity store",
+				"type":                    "identity",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
+		},
+		"secret/": map[string]interface{}{
+			"description":             "key/value secret storage",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"sys/": map[string]interface{}{
+			"description":             "system endpoints used for control, policy and debugging",
+			"type":                    "system",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl":           json.Number("0"),
+				"max_lease_ttl":               json.Number("0"),
+				"force_no_cache":              false,
+				"passthrough_request_headers": []interface{}{"Accept"},
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"cubbyhole/": map[string]interface{}{
+			"description":             "per-token private secret storage",
+			"type":                    "cubbyhole",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     true,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"identity/": map[string]interface{}{
+			"description":             "identity store",
+			"type":                    "identity",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
 		},
 	}
 	testResponseStatus(t, resp, 200)
@@ -417,11 +680,17 @@ func TestSysUnmount(t *testing.T) {
 		if v.(map[string]interface{})["accessor"] == "" {
 			t.Fatalf("no accessor from %s", k)
 		}
+		if v.(map[string]interface{})["uuid"] == "" {
+			t.Fatalf("no uuid from %s", k)
+		}
+		expected[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 		expected["data"].(map[string]interface{})[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected["data"].(map[string]interface{})[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("bad: %#v", actual)
+	if diff := deep.Equal(actual, expected); len(diff) > 0 {
+		t.Fatalf("bad, diff: %#v", diff)
 	}
 }
 
@@ -458,11 +727,17 @@ func TestSysTuneMount_Options(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "foo",
 			"default_lease_ttl": json.Number("2764800"),
 			"max_lease_ttl":     json.Number("2764800"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"test": "true"},
 		},
+		"description":       "foo",
+		"default_lease_ttl": json.Number("2764800"),
+		"max_lease_ttl":     json.Number("2764800"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"test": "true"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -470,7 +745,7 @@ func TestSysTuneMount_Options(t *testing.T) {
 		t.Fatalf("bad:\nExpected: %#v\nActual:%#v", expected, actual)
 	}
 
-	// Unset the mount tune value
+	// Check that we're not allowed to unset the options map once that's set
 	resp = testHttpPost(t, token, addr+"/v1/sys/mounts/foo/tune", map[string]interface{}{
 		"options": map[string]string{},
 	})
@@ -482,6 +757,7 @@ func TestSysTuneMount_Options(t *testing.T) {
 
 	actual = map[string]interface{}{}
 	expected = map[string]interface{}{
+		"description":    "foo",
 		"lease_id":       "",
 		"renewable":      false,
 		"lease_duration": json.Number("0"),
@@ -489,11 +765,16 @@ func TestSysTuneMount_Options(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "foo",
 			"default_lease_ttl": json.Number("2764800"),
 			"max_lease_ttl":     json.Number("2764800"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"test": "true"},
 		},
+		"default_lease_ttl": json.Number("2764800"),
+		"max_lease_ttl":     json.Number("2764800"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"test": "true"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -526,70 +807,137 @@ func TestSysTuneMount(t *testing.T) {
 		"auth":           nil,
 		"data": map[string]interface{}{
 			"foo/": map[string]interface{}{
-				"description": "foo",
-				"type":        "kv",
+				"description":             "foo",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{},
 			},
 			"secret/": map[string]interface{}{
-				"description": "key/value secret storage",
-				"type":        "kv",
+				"description":             "key/value secret storage",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"sys/": map[string]interface{}{
-				"description": "system endpoints used for control, policy and debugging",
-				"type":        "system",
+				"description":             "system endpoints used for control, policy and debugging",
+				"type":                    "system",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
-					"default_lease_ttl": json.Number("0"),
-					"max_lease_ttl":     json.Number("0"),
-					"force_no_cache":    false,
-					"plugin_name":       "",
+					"default_lease_ttl":           json.Number("0"),
+					"max_lease_ttl":               json.Number("0"),
+					"force_no_cache":              false,
+					"passthrough_request_headers": []interface{}{"Accept"},
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"cubbyhole/": map[string]interface{}{
-				"description": "per-token private secret storage",
-				"type":        "cubbyhole",
+				"description":             "per-token private secret storage",
+				"type":                    "cubbyhole",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     true,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"identity/": map[string]interface{}{
-				"description": "identity store",
-				"type":        "identity",
+				"description":             "identity store",
+				"type":                    "identity",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
+		},
+		"foo/": map[string]interface{}{
+			"description":             "foo",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{},
+		},
+		"secret/": map[string]interface{}{
+			"description":             "key/value secret storage",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"sys/": map[string]interface{}{
+			"description":             "system endpoints used for control, policy and debugging",
+			"type":                    "system",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl":           json.Number("0"),
+				"max_lease_ttl":               json.Number("0"),
+				"force_no_cache":              false,
+				"passthrough_request_headers": []interface{}{"Accept"},
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"cubbyhole/": map[string]interface{}{
+			"description":             "per-token private secret storage",
+			"type":                    "cubbyhole",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     true,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"identity/": map[string]interface{}{
+			"description":             "identity store",
+			"type":                    "identity",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
 		},
 	}
 	testResponseStatus(t, resp, 200)
@@ -599,11 +947,17 @@ func TestSysTuneMount(t *testing.T) {
 		if v.(map[string]interface{})["accessor"] == "" {
 			t.Fatalf("no accessor from %s", k)
 		}
+		if v.(map[string]interface{})["uuid"] == "" {
+			t.Fatalf("no uuid from %s", k)
+		}
+		expected[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 		expected["data"].(map[string]interface{})[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected["data"].(map[string]interface{})[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("bad: %#v", actual)
+	if diff := deep.Equal(actual, expected); len(diff) > 0 {
+		t.Fatalf("bad, diff: %#v", diff)
 	}
 
 	// Shorter than system default
@@ -660,70 +1014,137 @@ func TestSysTuneMount(t *testing.T) {
 		"auth":           nil,
 		"data": map[string]interface{}{
 			"foo/": map[string]interface{}{
-				"description": "foo",
-				"type":        "kv",
+				"description":             "foo",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("259196400"),
 					"max_lease_ttl":     json.Number("259200000"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"secret/": map[string]interface{}{
-				"description": "key/value secret storage",
-				"type":        "kv",
+				"description":             "key/value secret storage",
+				"type":                    "kv",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   map[string]interface{}{"version": "1"},
 			},
 			"sys/": map[string]interface{}{
-				"description": "system endpoints used for control, policy and debugging",
-				"type":        "system",
+				"description":             "system endpoints used for control, policy and debugging",
+				"type":                    "system",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
-					"default_lease_ttl": json.Number("0"),
-					"max_lease_ttl":     json.Number("0"),
-					"force_no_cache":    false,
-					"plugin_name":       "",
+					"default_lease_ttl":           json.Number("0"),
+					"max_lease_ttl":               json.Number("0"),
+					"force_no_cache":              false,
+					"passthrough_request_headers": []interface{}{"Accept"},
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"cubbyhole/": map[string]interface{}{
-				"description": "per-token private secret storage",
-				"type":        "cubbyhole",
+				"description":             "per-token private secret storage",
+				"type":                    "cubbyhole",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     true,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
 			"identity/": map[string]interface{}{
-				"description": "identity store",
-				"type":        "identity",
+				"description":             "identity store",
+				"type":                    "identity",
+				"external_entropy_access": false,
 				"config": map[string]interface{}{
 					"default_lease_ttl": json.Number("0"),
 					"max_lease_ttl":     json.Number("0"),
 					"force_no_cache":    false,
-					"plugin_name":       "",
 				},
 				"local":     false,
 				"seal_wrap": false,
 				"options":   interface{}(nil),
 			},
+		},
+		"foo/": map[string]interface{}{
+			"description":             "foo",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("259196400"),
+				"max_lease_ttl":     json.Number("259200000"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"secret/": map[string]interface{}{
+			"description":             "key/value secret storage",
+			"type":                    "kv",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   map[string]interface{}{"version": "1"},
+		},
+		"sys/": map[string]interface{}{
+			"description":             "system endpoints used for control, policy and debugging",
+			"type":                    "system",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl":           json.Number("0"),
+				"max_lease_ttl":               json.Number("0"),
+				"force_no_cache":              false,
+				"passthrough_request_headers": []interface{}{"Accept"},
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"cubbyhole/": map[string]interface{}{
+			"description":             "per-token private secret storage",
+			"type":                    "cubbyhole",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     true,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
+		},
+		"identity/": map[string]interface{}{
+			"description":             "identity store",
+			"type":                    "identity",
+			"external_entropy_access": false,
+			"config": map[string]interface{}{
+				"default_lease_ttl": json.Number("0"),
+				"max_lease_ttl":     json.Number("0"),
+				"force_no_cache":    false,
+			},
+			"local":     false,
+			"seal_wrap": false,
+			"options":   interface{}(nil),
 		},
 	}
 
@@ -734,11 +1155,17 @@ func TestSysTuneMount(t *testing.T) {
 		if v.(map[string]interface{})["accessor"] == "" {
 			t.Fatalf("no accessor from %s", k)
 		}
+		if v.(map[string]interface{})["uuid"] == "" {
+			t.Fatalf("no uuid from %s", k)
+		}
+		expected[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 		expected["data"].(map[string]interface{})[k].(map[string]interface{})["accessor"] = v.(map[string]interface{})["accessor"]
+		expected["data"].(map[string]interface{})[k].(map[string]interface{})["uuid"] = v.(map[string]interface{})["uuid"]
 	}
 
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("bad:\nExpected: %#v\nActual:%#v", expected, actual)
+	if diff := deep.Equal(actual, expected); len(diff) > 0 {
+		t.Fatalf("bad, diff: %#v", diff)
 	}
 
 	// Check simple configuration endpoint
@@ -752,11 +1179,17 @@ func TestSysTuneMount(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "foo",
 			"default_lease_ttl": json.Number("259196400"),
 			"max_lease_ttl":     json.Number("259200000"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"version": "1"},
 		},
+		"description":       "foo",
+		"default_lease_ttl": json.Number("259196400"),
+		"max_lease_ttl":     json.Number("259200000"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"version": "1"},
 	}
 
 	testResponseStatus(t, resp, 200)
@@ -768,6 +1201,7 @@ func TestSysTuneMount(t *testing.T) {
 
 	// Set a low max
 	resp = testHttpPost(t, token, addr+"/v1/sys/mounts/secret/tune", map[string]interface{}{
+		"description":       "foobar",
 		"default_lease_ttl": "40s",
 		"max_lease_ttl":     "80s",
 	})
@@ -783,11 +1217,17 @@ func TestSysTuneMount(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "foobar",
 			"default_lease_ttl": json.Number("40"),
 			"max_lease_ttl":     json.Number("80"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"version": "1"},
 		},
+		"description":       "foobar",
+		"default_lease_ttl": json.Number("40"),
+		"max_lease_ttl":     json.Number("80"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"version": "1"},
 	}
 
 	testResponseStatus(t, resp, 200)
@@ -874,6 +1314,7 @@ func TestSysTuneMount_nonHMACKeys(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":                  "key/value secret storage",
 			"default_lease_ttl":            json.Number("2764800"),
 			"max_lease_ttl":                json.Number("2764800"),
 			"force_no_cache":               false,
@@ -881,6 +1322,13 @@ func TestSysTuneMount_nonHMACKeys(t *testing.T) {
 			"audit_non_hmac_response_keys": []interface{}{"bar"},
 			"options":                      map[string]interface{}{"version": "1"},
 		},
+		"description":                  "key/value secret storage",
+		"default_lease_ttl":            json.Number("2764800"),
+		"max_lease_ttl":                json.Number("2764800"),
+		"force_no_cache":               false,
+		"audit_non_hmac_request_keys":  []interface{}{"foo"},
+		"audit_non_hmac_response_keys": []interface{}{"bar"},
+		"options":                      map[string]interface{}{"version": "1"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -912,11 +1360,17 @@ func TestSysTuneMount_nonHMACKeys(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "key/value secret storage",
 			"default_lease_ttl": json.Number("2764800"),
 			"max_lease_ttl":     json.Number("2764800"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"version": "1"},
 		},
+		"description":       "key/value secret storage",
+		"default_lease_ttl": json.Number("2764800"),
+		"max_lease_ttl":     json.Number("2764800"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"version": "1"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -944,11 +1398,17 @@ func TestSysTuneMount_listingVisibility(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "key/value secret storage",
 			"default_lease_ttl": json.Number("2764800"),
 			"max_lease_ttl":     json.Number("2764800"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"version": "1"},
 		},
+		"description":       "key/value secret storage",
+		"default_lease_ttl": json.Number("2764800"),
+		"max_lease_ttl":     json.Number("2764800"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"version": "1"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -975,12 +1435,19 @@ func TestSysTuneMount_listingVisibility(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":        "key/value secret storage",
 			"default_lease_ttl":  json.Number("2764800"),
 			"max_lease_ttl":      json.Number("2764800"),
 			"force_no_cache":     false,
 			"listing_visibility": "unauth",
 			"options":            map[string]interface{}{"version": "1"},
 		},
+		"description":        "key/value secret storage",
+		"default_lease_ttl":  json.Number("2764800"),
+		"max_lease_ttl":      json.Number("2764800"),
+		"force_no_cache":     false,
+		"listing_visibility": "unauth",
+		"options":            map[string]interface{}{"version": "1"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -1014,12 +1481,19 @@ func TestSysTuneMount_passthroughRequestHeaders(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":                 "key/value secret storage",
 			"default_lease_ttl":           json.Number("2764800"),
 			"max_lease_ttl":               json.Number("2764800"),
 			"options":                     map[string]interface{}{"version": "1"},
 			"force_no_cache":              false,
 			"passthrough_request_headers": []interface{}{"X-Vault-Foo"},
 		},
+		"description":                 "key/value secret storage",
+		"default_lease_ttl":           json.Number("2764800"),
+		"max_lease_ttl":               json.Number("2764800"),
+		"options":                     map[string]interface{}{"version": "1"},
+		"force_no_cache":              false,
+		"passthrough_request_headers": []interface{}{"X-Vault-Foo"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]
@@ -1046,11 +1520,17 @@ func TestSysTuneMount_passthroughRequestHeaders(t *testing.T) {
 		"warnings":       nil,
 		"auth":           nil,
 		"data": map[string]interface{}{
+			"description":       "key/value secret storage",
 			"default_lease_ttl": json.Number("2764800"),
 			"max_lease_ttl":     json.Number("2764800"),
 			"force_no_cache":    false,
 			"options":           map[string]interface{}{"version": "1"},
 		},
+		"description":       "key/value secret storage",
+		"default_lease_ttl": json.Number("2764800"),
+		"max_lease_ttl":     json.Number("2764800"),
+		"force_no_cache":    false,
+		"options":           map[string]interface{}{"version": "1"},
 	}
 	testResponseBody(t, resp, &actual)
 	expected["request_id"] = actual["request_id"]

@@ -1,8 +1,28 @@
-import Ember from 'ember';
+import { next } from '@ember/runloop';
+import { inject as service } from '@ember/service';
+import { match, alias, or } from '@ember/object/computed';
+import { assign } from '@ember/polyfills';
+import { dasherize } from '@ember/string';
+import Component from '@ember/component';
+import { get, computed } from '@ember/object';
 import { supportedAuthBackends } from 'vault/helpers/supported-auth-backends';
 import { task } from 'ember-concurrency';
 const BACKENDS = supportedAuthBackends();
-const { computed, inject, get } = Ember;
+
+/**
+ * @module AuthForm
+ * The `AuthForm` is used to sign users into Vault.
+ *
+ * @example ```js
+ * // All properties are passed in via query params.
+ *   <AuthForm @wrappedToken={{wrappedToken}} @cluster={{model}} @namespace={{namespaceQueryParam}} @redirectTo={{redirectTo}} @selectedAuth={{authMethod}}/>```
+ *
+ * @param wrappedToken=null {String} - The auth method that is currently selected in the dropdown.
+ * @param cluster=null {Object} - The auth method that is currently selected in the dropdown. This corresponds to an Ember Model.
+ * @param namespace=null {String} - The currently active namespace.
+ * @param redirectTo=null {String} - The name of the route to redirect to.
+ * @param selectedAuth=null {String} - The auth method that is currently selected in the dropdown.
+ */
 
 const DEFAULTS = {
   token: null,
@@ -11,41 +31,49 @@ const DEFAULTS = {
   customPath: null,
 };
 
-export default Ember.Component.extend(DEFAULTS, {
-  router: inject.service(),
-  auth: inject.service(),
-  flashMessages: inject.service(),
-  store: inject.service(),
-  csp: inject.service('csp-event'),
+export default Component.extend(DEFAULTS, {
+  router: service(),
+  auth: service(),
+  flashMessages: service(),
+  store: service(),
+  csp: service('csp-event'),
 
-  // set during init and potentially passed in via a query param
+  //  passed in via a query param
   selectedAuth: null,
   methods: null,
   cluster: null,
   redirectTo: null,
   namespace: null,
+  wrappedToken: null,
   // internal
   oldNamespace: null,
+
   didReceiveAttrs() {
     this._super(...arguments);
-    let token = this.get('wrappedToken');
-    let newMethod = this.get('selectedAuth');
-    let oldMethod = this.get('oldSelectedAuth');
+    let {
+      wrappedToken: token,
+      oldWrappedToken: oldToken,
+      oldNamespace: oldNS,
+      namespace: ns,
+      selectedAuth: newMethod,
+      oldSelectedAuth: oldMethod,
+    } = this;
 
-    let ns = this.get('namespace');
-    let oldNS = this.get('oldNamespace');
-    if (oldNS === null || oldNS !== ns) {
-      this.get('fetchMethods').perform();
-    }
-    this.set('oldNamespace', ns);
-    if (oldMethod && oldMethod !== newMethod) {
-      this.resetDefaults();
-    }
-    this.set('oldSelectedAuth', newMethod);
-
-    if (token) {
-      this.get('unwrapToken').perform(token);
-    }
+    next(() => {
+      if (!token && (oldNS === null || oldNS !== ns)) {
+        this.fetchMethods.perform();
+      }
+      this.set('oldNamespace', ns);
+      // we only want to trigger this once
+      if (token && !oldToken) {
+        this.unwrapToken.perform(token);
+        this.set('oldWrappedToken', token);
+      }
+      if (oldMethod && oldMethod !== newMethod) {
+        this.resetDefaults();
+      }
+      this.set('oldSelectedAuth', newMethod);
+    });
   },
 
   didRender() {
@@ -55,22 +83,23 @@ export default Ember.Component.extend(DEFAULTS, {
     if (activeEle) {
       activeEle.scrollIntoView();
     }
-    // this is here because we're changing the `with` attr and there's no way to short-circuit rendering,
-    // so we'll just nav -> get new attrs -> re-render
-    if (!this.get('selectedAuth') || (this.get('selectedAuth') && !this.get('selectedAuthBackend'))) {
-      this.set('selectedAuth', this.firstMethod());
-      this.get('router').replaceWith({
-        queryParams: {
-          with: this.firstMethod(),
-          wrappedToken: this.get('wrappedToken'),
-          namespace: this.get('namespace'),
-        },
-      });
-    }
+
+    next(() => {
+      let firstMethod = this.firstMethod();
+      // set `with` to the first method
+      if (
+        !this.wrappedToken &&
+        ((this.fetchMethods.isIdle && firstMethod && !this.selectedAuth) ||
+          (this.selectedAuth && !this.selectedAuthBackend))
+      ) {
+        this.set('selectedAuth', firstMethod);
+      }
+    });
   },
 
   firstMethod() {
-    let firstMethod = this.get('methodsToShow.firstObject');
+    let firstMethod = this.methodsToShow.firstObject;
+    if (!firstMethod) return;
     // prefer backends with a path over those with a type
     return get(firstMethod, 'path') || get(firstMethod, 'type');
   },
@@ -79,17 +108,16 @@ export default Ember.Component.extend(DEFAULTS, {
     this.setProperties(DEFAULTS);
   },
 
-  selectedAuthIsPath: computed.match('selectedAuth', /\/$/),
-  selectedAuthBackend: Ember.computed(
+  selectedAuthIsPath: match('selectedAuth', /\/$/),
+  selectedAuthBackend: computed(
+    'wrappedToken',
     'methods',
     'methods.[]',
     'selectedAuth',
     'selectedAuthIsPath',
     function() {
-      let methods = this.get('methods');
-      let selectedAuth = this.get('selectedAuth');
-      let keyIsPath = this.get('selectedAuthIsPath');
-      if (!methods) {
+      let { wrappedToken, methods, selectedAuth, selectedAuthIsPath: keyIsPath } = this;
+      if (!methods && !wrappedToken) {
         return {};
       }
       if (keyIsPath) {
@@ -99,28 +127,31 @@ export default Ember.Component.extend(DEFAULTS, {
     }
   ),
 
-  providerPartialName: computed('selectedAuthBackend', function() {
-    let type = this.get('selectedAuthBackend.type') || 'token';
+  providerPartialName: computed('selectedAuthBackend.type', function() {
+    if (!this.selectedAuthBackend) {
+      return;
+    }
+    let type = this.selectedAuthBackend.type || 'token';
     type = type.toLowerCase();
-    let templateName = Ember.String.dasherize(type);
+    let templateName = dasherize(type);
     return `partials/auth-form/${templateName}`;
   }),
 
-  hasCSPError: computed.alias('csp.connectionViolations.firstObject'),
+  hasCSPError: alias('csp.connectionViolations.firstObject'),
 
   cspErrorText: `This is a standby Vault node but can't communicate with the active node via request forwarding. Sign in at the active node to use the Vault UI.`,
 
   allSupportedMethods: computed('methodsToShow', 'hasMethodsWithPath', function() {
-    let hasMethodsWithPath = this.get('hasMethodsWithPath');
-    let methodsToShow = this.get('methodsToShow');
+    let hasMethodsWithPath = this.hasMethodsWithPath;
+    let methodsToShow = this.methodsToShow;
     return hasMethodsWithPath ? methodsToShow.concat(BACKENDS) : methodsToShow;
   }),
 
   hasMethodsWithPath: computed('methodsToShow', function() {
-    return this.get('methodsToShow').isAny('path');
+    return this.methodsToShow.isAny('path');
   }),
   methodsToShow: computed('methods', function() {
-    let methods = this.get('methods') || [];
+    let methods = this.methods || [];
     let shownMethods = methods.filter(m =>
       BACKENDS.find(b => get(b, 'type').toLowerCase() === get(m, 'type').toLowerCase())
     );
@@ -128,9 +159,9 @@ export default Ember.Component.extend(DEFAULTS, {
   }),
 
   unwrapToken: task(function*(token) {
-    // will be using the token auth method, so set it here
+    // will be using the Token Auth Method, so set it here
     this.set('selectedAuth', 'token');
-    let adapter = this.get('store').adapterFor('tools');
+    let adapter = this.store.adapterFor('tools');
     try {
       let response = yield adapter.toolAction('unwrap', null, { clientToken: token });
       this.set('token', response.auth.client_token);
@@ -138,70 +169,110 @@ export default Ember.Component.extend(DEFAULTS, {
     } catch (e) {
       this.set('error', `Token unwrap failed: ${e.errors[0]}`);
     }
-  }),
+  }).withTestWaiter(),
 
   fetchMethods: task(function*() {
-    let store = this.get('store');
-    this.set('methods', null);
-    store.unloadAll('auth-method');
+    let store = this.store;
     try {
       let methods = yield store.findAll('auth-method', {
         adapterOptions: {
           unauthenticated: true,
         },
       });
-      this.set('methods', methods);
+      this.set('methods', methods.map(m => m.serialize({ includeId: true })));
+      next(() => {
+        store.unloadAll('auth-method');
+      });
     } catch (e) {
-      this.set('error', `There was an error fetching auth methods: ${e.errors[0]}`);
+      this.set('error', `There was an error fetching Auth Methods: ${e.errors[0]}`);
     }
-  }),
+  }).withTestWaiter(),
 
-  showLoading: computed.or('fetchMethods.isRunning', 'unwrapToken.isRunning'),
+  showLoading: or('isLoading', 'authenticate.isRunning', 'fetchMethods.isRunning', 'unwrapToken.isRunning'),
 
-  handleError(e) {
+  handleError(e, prefixMessage = true) {
     this.set('loading', false);
-    let errors = e.errors.map(error => {
-      if (error.detail) {
-        return error.detail;
-      }
-      return error;
-    });
-    this.set('error', `Authentication failed: ${errors.join('.')}`);
+    let errors;
+    if (e.errors) {
+      errors = e.errors.map(error => {
+        if (error.detail) {
+          return error.detail;
+        }
+        return error;
+      });
+    } else {
+      errors = [e];
+    }
+    let message = prefixMessage ? 'Authentication failed: ' : '';
+    this.set('error', `${message}${errors.join('.')}`);
   },
+
+  authenticate: task(function*(backendType, data) {
+    let clusterId = this.cluster.id;
+    try {
+      let authResponse = yield this.auth.authenticate({ clusterId, backend: backendType, data });
+
+      let { isRoot, namespace } = authResponse;
+      let transition;
+      let { redirectTo } = this;
+      if (redirectTo) {
+        // reset the value on the controller because it's bound here
+        this.set('redirectTo', '');
+        // here we don't need the namespace because it will be encoded in redirectTo
+        transition = this.router.transitionTo(redirectTo);
+      } else {
+        transition = this.router.transitionTo('vault.cluster', { queryParams: { namespace } });
+      }
+      // returning this w/then because if we keep it
+      // in the task, it will get cancelled when the component in un-rendered
+      yield transition.followRedirects().then(() => {
+        if (isRoot) {
+          this.flashMessages.warning(
+            'You have logged in with a root token. As a security precaution, this root token will not be stored by your browser and you will need to re-authenticate after the window is closed or refreshed.'
+          );
+        }
+      });
+    } catch (e) {
+      this.handleError(e);
+    }
+  }).withTestWaiter(),
 
   actions: {
     doSubmit() {
+      let passedData, e;
+      if (arguments.length > 1) {
+        [passedData, e] = arguments;
+      } else {
+        [e] = arguments;
+      }
+      if (e) {
+        e.preventDefault();
+      }
       let data = {};
       this.setProperties({
-        loading: true,
         error: null,
       });
-      let targetRoute = this.get('redirectTo') || 'vault.cluster';
-      let backend = this.get('selectedAuthBackend') || {};
+      let backend = this.selectedAuthBackend || {};
       let backendMeta = BACKENDS.find(
         b => (get(b, 'type') || '').toLowerCase() === (get(backend, 'type') || '').toLowerCase()
       );
-      let attributes = get(backendMeta || {}, 'formAttributes') || {};
+      let attributes = get(backendMeta || {}, 'formAttributes') || [];
 
-      data = Ember.assign(data, this.getProperties(...attributes));
-      if (this.get('customPath') || get(backend, 'id')) {
-        data.path = this.get('customPath') || get(backend, 'id');
+      data = assign(data, this.getProperties(...attributes));
+      if (passedData) {
+        data = assign(data, passedData);
       }
-      const clusterId = this.get('cluster.id');
-      this.get('auth').authenticate({ clusterId, backend: get(backend, 'type'), data }).then(
-        ({ isRoot, namespace }) => {
-          this.set('loading', false);
-          const transition = this.get('router').transitionTo(targetRoute, { queryParams: { namespace } });
-          if (isRoot) {
-            transition.followRedirects().then(() => {
-              this.get('flashMessages').warning(
-                'You have logged in with a root token. As a security precaution, this root token will not be stored by your browser and you will need to re-authenticate after the window is closed or refreshed.'
-              );
-            });
-          }
-        },
-        (...errArgs) => this.handleError(...errArgs)
-      );
+      if (this.customPath || get(backend, 'id')) {
+        data.path = this.customPath || get(backend, 'id');
+      }
+      return this.authenticate.unlinked().perform(backend.type, data);
+    },
+    handleError(e) {
+      if (e) {
+        this.handleError(e, false);
+      } else {
+        this.set('error', null);
+      }
     },
   },
 });

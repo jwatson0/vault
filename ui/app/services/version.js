@@ -1,7 +1,7 @@
-import Ember from 'ember';
+import { readOnly, match, not } from '@ember/object/computed';
+import Service, { inject as service } from '@ember/service';
+import { computed } from '@ember/object';
 import { task } from 'ember-concurrency';
-
-const { Service, inject, computed } = Ember;
 
 const hasFeatureMethod = (context, featureKey) => {
   const features = context.get('features');
@@ -17,9 +17,9 @@ const hasFeature = featureKey => {
 };
 export default Service.extend({
   _features: null,
-  features: computed.readOnly('_features'),
+  features: readOnly('_features'),
   version: null,
-  store: inject.service(),
+  store: service(),
 
   hasPerfReplication: hasFeature('Performance Replication'),
 
@@ -28,9 +28,9 @@ export default Service.extend({
   hasSentinel: hasFeature('Sentinel'),
   hasNamespaces: hasFeature('Namespaces'),
 
-  isEnterprise: computed.match('version', /\+.+$/),
+  isEnterprise: match('version', /\+.+$/),
 
-  isOSS: computed.not('isEnterprise'),
+  isOSS: not('isEnterprise'),
 
   setVersion(resp) {
     this.set('version', resp.version);
@@ -48,20 +48,20 @@ export default Service.extend({
   },
 
   getVersion: task(function*() {
-    if (this.get('version')) {
+    if (this.version) {
       return;
     }
-    let response = yield this.get('store').adapterFor('cluster').health();
+    let response = yield this.store.adapterFor('cluster').health();
     this.setVersion(response);
     return;
   }),
 
   getFeatures: task(function*() {
-    if (this.get('features.length') || this.get('isOSS')) {
+    if (this.features?.length || this.isOSS) {
       return;
     }
     try {
-      let response = yield this.get('store').adapterFor('cluster').features();
+      let response = yield this.store.adapterFor('cluster').features();
       this.setFeatures(response);
       return;
     } catch (err) {
@@ -70,9 +70,9 @@ export default Service.extend({
   }).keepLatest(),
 
   fetchVersion: function() {
-    return this.get('getVersion').perform();
+    return this.getVersion.perform();
   },
   fetchFeatures: function() {
-    return this.get('getFeatures').perform();
+    return this.getFeatures.perform();
   },
 });

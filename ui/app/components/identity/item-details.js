@@ -1,9 +1,8 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import Component from '@ember/component';
 
-const { inject } = Ember;
-
-export default Ember.Component.extend({
-  flashMessages: inject.service(),
+export default Component.extend({
+  flashMessages: service(),
 
   actions: {
     enable(model) {
@@ -12,10 +11,10 @@ export default Ember.Component.extend({
       model
         .save()
         .then(() => {
-          this.get('flashMessages').success(`Successfully enabled entity: ${model.id}`);
+          this.flashMessages.success(`Successfully enabled entity: ${model.id}`);
         })
         .catch(e => {
-          this.get('flashMessages').success(
+          this.flashMessages.success(
             `There was a problem enabling the entity: ${model.id} - ${e.errors.join(' ') || e.message}`
           );
         });

@@ -1,7 +1,7 @@
-import Ember from 'ember';
+import Component from '@ember/component';
 import keys from 'vault/lib/keycodes';
 
-export default Ember.Component.extend({
+export default Component.extend({
   onExecuteCommand() {},
   onFullscreen() {},
   onValueUpdate() {},
@@ -14,18 +14,18 @@ export default Ember.Component.extend({
       const keyCode = event.keyCode;
       switch (keyCode) {
         case keys.ENTER:
-          this.get('onExecuteCommand')(event.target.value);
+          this.onExecuteCommand(event.target.value);
           break;
         case keys.UP:
         case keys.DOWN:
-          this.get('onShiftCommand')(keyCode);
+          this.onShiftCommand(keyCode);
           break;
         default:
-          this.get('onValueUpdate')(event.target.value);
+          this.onValueUpdate(event.target.value);
       }
     },
     fullscreen() {
-      this.get('onFullscreen')();
+      this.onFullscreen();
     },
   },
 });

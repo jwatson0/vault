@@ -1,61 +1,51 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import { alias, or } from '@ember/object/computed';
+import Component from '@ember/component';
 import { matchesState } from 'xstate';
 
-const { inject, computed } = Ember;
-
-export default Ember.Component.extend({
+export default Component.extend({
   classNames: ['ui-wizard-container'],
-  wizard: inject.service(),
-  auth: inject.service(),
+  wizard: service(),
+  auth: service(),
 
-  shouldRender: computed('wizard.showWhenUnauthenticated', 'auth.currentToken', function() {
-    return this.get('auth.currentToken') || this.get('wizard.showWhenUnauthenticated');
-  }),
-  currentState: computed.alias('wizard.currentState'),
-  featureState: computed.alias('wizard.featureState'),
-  featureComponent: computed.alias('wizard.featureComponent'),
-  tutorialComponent: computed.alias('wizard.tutorialComponent'),
-  componentState: computed.alias('wizard.componentState'),
-  nextFeature: computed.alias('wizard.nextFeature'),
-  nextStep: computed.alias('wizard.nextStep'),
+  shouldRender: or('auth.currentToken', 'wizard.showWhenUnauthenticated'),
+  currentState: alias('wizard.currentState'),
+  featureState: alias('wizard.featureState'),
+  featureComponent: alias('wizard.featureComponent'),
+  tutorialComponent: alias('wizard.tutorialComponent'),
+  componentState: alias('wizard.componentState'),
+  nextFeature: alias('wizard.nextFeature'),
+  nextStep: alias('wizard.nextStep'),
 
   actions: {
     dismissWizard() {
-      this.get('wizard').transitionTutorialMachine(this.get('currentState'), 'DISMISS');
+      this.wizard.transitionTutorialMachine(this.currentState, 'DISMISS');
     },
 
     advanceWizard() {
-      let inInit = matchesState('init', this.get('wizard.currentState'));
-      let event = inInit ? this.get('wizard.initEvent') || 'CONTINUE' : 'CONTINUE';
-      this.get('wizard').transitionTutorialMachine(this.get('currentState'), event);
+      let inInit = matchesState('init', this.wizard.currentState);
+      let event = inInit ? this.wizard.initEvent || 'CONTINUE' : 'CONTINUE';
+      this.wizard.transitionTutorialMachine(this.currentState, event);
     },
 
     advanceFeature() {
-      this.get('wizard').transitionFeatureMachine(this.get('featureState'), 'CONTINUE');
+      this.wizard.transitionFeatureMachine(this.featureState, 'CONTINUE');
     },
 
     finishFeature() {
-      this.get('wizard').transitionFeatureMachine(this.get('featureState'), 'DONE');
+      this.wizard.transitionFeatureMachine(this.featureState, 'DONE');
     },
 
     repeatStep() {
-      this.get('wizard').transitionFeatureMachine(
-        this.get('featureState'),
-        'REPEAT',
-        this.get('componentState')
-      );
+      this.wizard.transitionFeatureMachine(this.featureState, 'REPEAT', this.componentState);
     },
 
     resetFeature() {
-      this.get('wizard').transitionFeatureMachine(
-        this.get('featureState'),
-        'RESET',
-        this.get('componentState')
-      );
+      this.wizard.transitionFeatureMachine(this.featureState, 'RESET', this.componentState);
     },
 
     pauseWizard() {
-      this.get('wizard').transitionTutorialMachine(this.get('currentState'), 'PAUSE');
+      this.wizard.transitionTutorialMachine(this.currentState, 'PAUSE');
     },
   },
 });

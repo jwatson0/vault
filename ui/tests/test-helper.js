@@ -1,10 +1,14 @@
-import resolver from './helpers/resolver';
+import Application from 'vault/app';
+import config from 'vault/config/environment';
+import { setApplication } from '@ember/test-helpers';
+import { start } from 'ember-qunit';
 import './helpers/flash-message';
+import preloadAssets from 'ember-asset-loader/test-support/preload-assets';
+import manifest from 'vault/config/asset-manifest';
 
-import { setResolver } from 'ember-qunit';
-import { start } from 'ember-cli-qunit';
-import { useNativeEvents } from 'ember-cli-page-object/extend';
-
-useNativeEvents();
-setResolver(resolver);
-start();
+preloadAssets(manifest).then(() => {
+  setApplication(Application.create(config.APP));
+  start({
+    setupTestIsolationValidation: true,
+  });
+});

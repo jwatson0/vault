@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/vault/logical"
+	"github.com/hashicorp/vault/sdk/logical"
 )
 
-func client(ctx context.Context, s logical.Storage) (*api.Client, error, error) {
-	conf, userErr, intErr := readConfigAccess(ctx, s)
+func (b *backend) client(ctx context.Context, s logical.Storage) (*api.Client, error, error) {
+	conf, userErr, intErr := b.readConfigAccess(ctx, s)
 	if intErr != nil {
 		return nil, nil, intErr
 	}
@@ -24,6 +24,9 @@ func client(ctx context.Context, s logical.Storage) (*api.Client, error, error) 
 	consulConf.Address = conf.Address
 	consulConf.Scheme = conf.Scheme
 	consulConf.Token = conf.Token
+	consulConf.TLSConfig.CAPem = []byte(conf.CACert)
+	consulConf.TLSConfig.CertPEM = []byte(conf.ClientCert)
+	consulConf.TLSConfig.KeyPEM = []byte(conf.ClientKey)
 
 	client, err := api.NewClient(consulConf)
 	return client, nil, err

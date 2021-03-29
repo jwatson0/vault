@@ -1,19 +1,21 @@
-import Ember from 'ember';
+import { inject as service } from '@ember/service';
+import { next } from '@ember/runloop';
+import Route from '@ember/routing/route';
 import ControlGroupError from 'vault/lib/control-group-error';
 
-const { inject } = Ember;
-export default Ember.Route.extend({
-  controlGroup: inject.service(),
-  routing: inject.service('router'),
-  wizard: inject.service(),
-  namespaceService: inject.service('namespace'),
+export default Route.extend({
+  controlGroup: service(),
+  routing: service('router'),
+  wizard: service(),
+  namespaceService: service('namespace'),
+  featureFlagService: service('featureFlag'),
 
   actions: {
     willTransition() {
       window.scrollTo(0, 0);
     },
     error(error, transition) {
-      let controlGroup = this.get('controlGroup');
+      let controlGroup = this.controlGroup;
       if (error instanceof ControlGroupError) {
         return controlGroup.handleError(error, transition);
       }
@@ -21,7 +23,8 @@ export default Ember.Route.extend({
         controlGroup.unmarkTokenForUnwrap();
       }
 
-      let router = this.get('routing');
+      let router = this.routing;
+      //FIXME transition.intent likely needs to be replaced
       let errorURL = transition.intent.url;
       let { name, contexts, queryParams } = transition.intent;
 
@@ -57,26 +60,37 @@ export default Ember.Route.extend({
       return true;
     },
     didTransition() {
-      let wizard = this.get('wizard');
+      let wizard = this.wizard;
 
       if (wizard.get('currentState') !== 'active.feature') {
         return true;
       }
-      Ember.run.next(() => {
-        let applicationURL = this.get('routing.currentURL');
-        let activeRoute = this.get('routing.currentRouteName');
+      next(() => {
+        let applicationURL = this.routing.currentURL;
+        let activeRoute = this.routing.currentRouteName;
 
-        if (this.get('wizard.setURLAfterTransition')) {
+        if (this.wizard.setURLAfterTransition) {
           this.set('wizard.setURLAfterTransition', false);
           this.set('wizard.expectedURL', applicationURL);
           this.set('wizard.expectedRouteName', activeRoute);
         }
-        let expectedRouteName = this.get('wizard.expectedRouteName');
-        if (this.get('routing').isActive(expectedRouteName) === false) {
+        let expectedRouteName = this.wizard.expectedRouteName;
+        if (this.routing.isActive(expectedRouteName) === false) {
           wizard.transitionTutorialMachine(wizard.get('currentState'), 'PAUSE');
         }
       });
       return true;
     },
+  },
+
+  async beforeModel() {
+    const result = await fetch('/v1/sys/internal/ui/feature-flags', {
+      method: 'GET',
+    });
+    if (result.status === 200) {
+      const body = await result.json();
+      const flags = body.feature_flags || [];
+      this.featureFlagService.setFeatureFlags(flags);
+    }
   },
 });

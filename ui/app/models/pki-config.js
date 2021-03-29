@@ -1,11 +1,8 @@
-import Ember from 'ember';
-import DS from 'ember-data';
+import Model, { attr } from '@ember-data/model';
+import { computed } from '@ember/object';
 import { expandAttributeMeta } from 'vault/utils/field-to-attrs';
 
-const { attr } = DS;
-const { computed } = Ember;
-
-export default DS.Model.extend({
+export default Model.extend({
   backend: attr('string'),
   der: attr(),
   pem: attr('string'),
